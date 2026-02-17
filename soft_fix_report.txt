@@ -1,0 +1,6 @@
+Asset exists: BP_WWCharacter
+Asset exists: BP_Bandit
+Asset exists: BP_WWGameMode
+Set DefaultPawnClass to BP_WWCharacter
+Set EnemyClass to BP_Bandit
+Set MainMap GameMode override

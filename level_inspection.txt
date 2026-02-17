@@ -1,0 +1,3 @@
+Level: /Game/Maps/MainMap
+Total Actors: 0
+GameMode Override: BP_WWGameMode_C

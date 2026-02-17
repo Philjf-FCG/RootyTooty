@@ -1,0 +1,9 @@
+Deleted old BP: BP_Gunslinger
+Deleted old BP: BP_WWCharacter
+Deleted old BP: BP_WWGameMode
+Deleted old BP: BP_Bandit
+SUCCESS: Created BP_WWCharacter
+SUCCESS: Created BP_Bandit
+SUCCESS: Created BP_WWGameMode
+SUCCESS: Configured GameMode Pawn/Enemy
+SUCCESS: Set GameMode in MainMap settings
