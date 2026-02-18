@@ -4,6 +4,8 @@
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "WWCharacter.generated.h"
+#include "WWProjectile.h"
+
 
 class USpringArmComponent;
 class UCameraComponent;
@@ -52,6 +54,9 @@ protected:
   UPROPERTY(EditAnywhere, Category = "Weapon")
   float AttackRange;
 
+  UPROPERTY(EditAnywhere, Category = "Weapon")
+  TSubclassOf<class AWWProjectile> ProjectileClass;
+
 protected:
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
   USpringArmComponent *SpringArmComp;
@@ -63,6 +68,8 @@ private:
   float FireTimer;
 
   void Move(const FInputActionValue &Value);
+  void MoveForward(float Value);
+  void MoveRight(float Value);
   void AutoAttack();
   class AWWEnemy *FindNearestEnemy();
 };

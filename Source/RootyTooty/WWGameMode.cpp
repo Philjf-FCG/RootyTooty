@@ -44,8 +44,12 @@ void AWWGameMode::SpawnEnemy() {
       FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f) * SpawnRadius;
   FVector SpawnLocation = PlayerLocation + SpawnOffset;
 
+  FActorSpawnParameters SpawnParams;
+  SpawnParams.SpawnCollisionHandlingOverride =
+      ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
   AWWEnemy *NewEnemy = GetWorld()->SpawnActor<AWWEnemy>(
-      EnemyClass, SpawnLocation, FRotator::ZeroRotator);
+      EnemyClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
 
   if (NewEnemy) {
     // UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SpawnEnemy: Success Spawned %s at

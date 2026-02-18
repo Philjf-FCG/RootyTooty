@@ -34,6 +34,11 @@ AWWCharacter::AWWCharacter() {
 
   CameraComp = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
   CameraComp->SetupAttachment(SpringArmComp);
+
+  // Rotation to movement
+  bUseControllerRotationYaw = false;
+  GetCharacterMovement()->bOrientRotationToMovement = true;
+  GetCharacterMovement()->RotationRate = FRotator(0.0f, 540.0f, 0.0f);
 }
 
 void AWWCharacter::BeginPlay() {
@@ -101,12 +106,14 @@ void AWWCharacter::SetupPlayerInputComponent(
              TEXT("[DEBUG] MoveAction is NULL in SetupPlayerInputComponent"));
     }
   } else {
-    UE_LOG(LogTemp, Error,
-           TEXT("[DEBUG] FAILED to cast to EnhancedInputComponent! Actual "
-                "Class: %s"),
-           PlayerInputComponent ? *PlayerInputComponent->GetClass()->GetName()
-                                : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning,
+           TEXT("[DEBUG] Falling back to Legacy InputComponent"));
   }
+
+  // Legacy Fallback (Works with standard InputComponent)
+  PlayerInputComponent->BindAxis("MoveForward", this,
+                                 &AWWCharacter::MoveForward);
+  PlayerInputComponent->BindAxis("MoveRight", this, &AWWCharacter::MoveRight);
 }
 
 void AWWCharacter::Move(const FInputActionValue &Value) {
@@ -115,20 +122,51 @@ void AWWCharacter::Move(const FInputActionValue &Value) {
   if (Controller != nullptr) {
     AddMovementInput(GetActorForwardVector(), MovementVector.Y);
     AddMovementInput(GetActorRightVector(), MovementVector.X);
-    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Move Called | X: %f, Y: %f"),
+    UE_LOG(LogTemp, Warning,
+           TEXT("[DEBUG] Enhanced Move Called | X: %f, Y: %f"),
            MovementVector.X, MovementVector.Y);
-  } else {
-    UE_LOG(LogTemp, Error, TEXT("[DEBUG] Move Called but Controller is NULL"));
+  }
+}
+
+void AWWCharacter::MoveForward(float Value) {
+  if (Controller != nullptr && Value != 0.0f) {
+    AddMovementInput(GetActorForwardVector(), Value);
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Legacy MoveForward: %f"), Value);
+  }
+}
+
+void AWWCharacter::MoveRight(float Value) {
+  if (Controller != nullptr && Value != 0.0f) {
+    AddMovementInput(GetActorRightVector(), Value);
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Legacy MoveRight: %f"), Value);
   }
 }
 
 void AWWCharacter::AutoAttack() {
   AWWEnemy *Target = FindNearestEnemy();
   if (Target) {
-    // In a full implementation, we would spawn a projectile or apply damage
-    UGameplayStatics::ApplyDamage(Target, 20.0f, GetController(), this,
-                                  nullptr);
-    UE_LOG(LogTemp, Warning, TEXT("Shot fired at %s"), *Target->GetName());
+    if (ProjectileClass) {
+      FVector SpawnLocation =
+          GetActorLocation() + GetActorForwardVector() * 100.0f;
+      FRotator SpawnRotation =
+          (Target->GetActorLocation() - GetActorLocation()).Rotation();
+
+      FActorSpawnParameters SpawnParams;
+      SpawnParams.Owner = this;
+      SpawnParams.Instigator = GetInstigator();
+
+      GetWorld()->SpawnActor<AWWProjectile>(ProjectileClass, SpawnLocation,
+                                            SpawnRotation, SpawnParams);
+      UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Projectile Spawned towards %s"),
+             *Target->GetName());
+    } else {
+      // Fallback to instant damage if no projectile class is set
+      UGameplayStatics::ApplyDamage(Target, 20.0f, GetController(), this,
+                                    nullptr);
+      UE_LOG(LogTemp, Warning,
+             TEXT("[DEBUG] Instant Shot fired at %s (No ProjectileClass)"),
+             *Target->GetName());
+    }
   }
 }
 
