@@ -10,7 +10,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "WWEnemy.h"
 
-
 AWWCharacter::AWWCharacter() {
   PrimaryActorTick.bCanEverTick = true;
 
@@ -46,6 +45,25 @@ void AWWCharacter::BeginPlay() {
                 PC->GetLocalPlayer())) {
       if (DefaultMappingContext) {
         Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] IMC Added in BeginPlay"));
+      } else {
+        UE_LOG(LogTemp, Error,
+               TEXT("[DEBUG] DefaultMappingContext is NULL in BeginPlay"));
+      }
+    }
+  }
+}
+
+void AWWCharacter::PossessedBy(AController *NewController) {
+  Super::PossessedBy(NewController);
+
+  if (APlayerController *PC = Cast<APlayerController>(NewController)) {
+    if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
+            ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+                PC->GetLocalPlayer())) {
+      if (DefaultMappingContext) {
+        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] IMC Added in PossessedBy"));
       }
     }
   }
@@ -65,11 +83,17 @@ void AWWCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+  UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SetupPlayerInputComponent Called"));
+
   if (UEnhancedInputComponent *EnhancedInput =
           Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
     if (MoveAction) {
       EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this,
                                 &AWWCharacter::Move);
+      UE_LOG(LogTemp, Warning, TEXT("[DEBUG] MoveAction Bound"));
+    } else {
+      UE_LOG(LogTemp, Error,
+             TEXT("[DEBUG] MoveAction is NULL in SetupPlayerInputComponent"));
     }
   }
 }
@@ -80,8 +104,10 @@ void AWWCharacter::Move(const FInputActionValue &Value) {
   if (Controller != nullptr) {
     AddMovementInput(GetActorForwardVector(), MovementVector.Y);
     AddMovementInput(GetActorRightVector(), MovementVector.X);
-    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Moving: %s"),
-           *MovementVector.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Move Called | X: %f, Y: %f"),
+           MovementVector.X, MovementVector.Y);
+  } else {
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] Move Called but Controller is NULL"));
   }
 }
 

@@ -23,11 +23,12 @@ public:
 
 protected:
   virtual void BeginPlay() override;
+  virtual void PossessedBy(AController *NewController) override;
 
-  UPROPERTY(EditAnywhere, Category = "Input")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
   class UInputMappingContext *DefaultMappingContext;
 
-  UPROPERTY(EditAnywhere, Category = "Input")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
   class UInputAction *MoveAction;
 
   UPROPERTY(EditAnywhere, Category = "Stats")

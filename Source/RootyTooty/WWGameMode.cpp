@@ -3,7 +3,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "WWEnemy.h"
 
-
 AWWGameMode::AWWGameMode() {
   PrimaryActorTick.bCanEverTick = true;
   SpawnInterval = 2.0f;
@@ -25,8 +24,16 @@ void AWWGameMode::Tick(float DeltaTime) {
 
 void AWWGameMode::SpawnEnemy() {
   APawn *PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
-  if (!PlayerPawn || !EnemyClass)
+  if (!PlayerPawn) {
+    // UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SpawnEnemy: No PlayerPawn
+    // found"));
     return;
+  }
+
+  if (!EnemyClass) {
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] SpawnEnemy: EnemyClass is NULL"));
+    return;
+  }
 
   FVector PlayerLocation = PlayerPawn->GetActorLocation();
   float Angle = FMath::FRandRange(0.0f, 2.0f * PI);
@@ -34,6 +41,13 @@ void AWWGameMode::SpawnEnemy() {
       FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f) * SpawnRadius;
   FVector SpawnLocation = PlayerLocation + SpawnOffset;
 
-  GetWorld()->SpawnActor<AWWEnemy>(EnemyClass, SpawnLocation,
-                                   FRotator::ZeroRotator);
+  AWWEnemy *NewEnemy = GetWorld()->SpawnActor<AWWEnemy>(
+      EnemyClass, SpawnLocation, FRotator::ZeroRotator);
+
+  if (NewEnemy) {
+    // UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SpawnEnemy: Success Spawned %s at
+    // %s"), *NewEnemy->GetName(), *SpawnLocation.ToString());
+  } else {
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] SpawnEnemy: FAILED to SpawnActor"));
+  }
 }
