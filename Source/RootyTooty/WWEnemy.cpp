@@ -12,6 +12,7 @@ AWWEnemy::AWWEnemy() {
   XPReward = 20.0f;
 
   GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+  AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
 void AWWEnemy::BeginPlay() {
@@ -30,8 +31,24 @@ void AWWEnemy::Tick(float DeltaTime) {
   if (PlayerPawn) {
     FVector Direction = PlayerPawn->GetActorLocation() - GetActorLocation();
     Direction.Z = 0.0f;
+    float Distance = Direction.Size(); // Calculate distance before normalizing
     Direction.Normalize();
     AddMovementInput(Direction, 1.0f);
+
+    // Contact Damage
+    if (Distance < 100.0f) {
+      UGameplayStatics::ApplyDamage(PlayerPawn, Damage * DeltaTime,
+                                    GetController(), this, nullptr);
+    }
+
+    static float LogTimer = 0.0f;
+    LogTimer += DeltaTime;
+    if (LogTimer >= 2.0f) {
+      UE_LOG(LogTemp, Warning,
+             TEXT("[DEBUG] Bandit %s moving towards player. Dist: %f"),
+             *GetName(), Distance); // Log actual distance
+      LogTimer = 0.0f;
+    }
   }
 }
 

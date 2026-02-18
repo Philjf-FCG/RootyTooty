@@ -3,6 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
 #include "WWEnemy.h"
 
 AWWProjectile::AWWProjectile() {
@@ -23,6 +24,13 @@ AWWProjectile::AWWProjectile() {
   MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
   MeshComp->SetupAttachment(RootComponent);
   MeshComp->SetRelativeScale3D(FVector(0.2f, 0.2f, 0.2f));
+
+  // Use explicit paths for Engine content to ensure visibility
+  static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(
+      TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  if (SphereMesh.Succeeded()) {
+    MeshComp->SetStaticMesh(SphereMesh.Object);
+  }
 
   ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(
       TEXT("ProjectileComp"));

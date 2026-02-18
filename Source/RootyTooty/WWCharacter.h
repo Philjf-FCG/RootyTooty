@@ -4,8 +4,6 @@
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "WWCharacter.generated.h"
-#include "WWProjectile.h"
-
 
 class USpringArmComponent;
 class UCameraComponent;
@@ -22,6 +20,11 @@ public:
       class UInputComponent *PlayerInputComponent) override;
 
   void AddXP(float Amount);
+  virtual float TakeDamage(float DamageAmount,
+                           struct FDamageEvent const &DamageEvent,
+                           class AController *EventInstigator,
+                           AActor *DamageCauser) override;
+  void Die();
 
 protected:
   virtual void BeginPlay() override;
