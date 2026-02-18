@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "InputActionValue.h"
 #include "WWCharacter.generated.h"
 
 class USpringArmComponent;
@@ -22,6 +23,12 @@ public:
 
 protected:
   virtual void BeginPlay() override;
+
+  UPROPERTY(EditAnywhere, Category = "Input")
+  class UInputMappingContext *DefaultMappingContext;
+
+  UPROPERTY(EditAnywhere, Category = "Input")
+  class UInputAction *MoveAction;
 
   UPROPERTY(EditAnywhere, Category = "Stats")
   float MoveSpeed;
@@ -54,8 +61,7 @@ protected:
 private:
   float FireTimer;
 
-  void MoveForward(float Value);
-  void MoveRight(float Value);
+  void Move(const FInputActionValue &Value);
   void AutoAttack();
   class AWWEnemy *FindNearestEnemy();
 };

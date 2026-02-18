@@ -1,10 +1,15 @@
 #include "WWCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "WWEnemy.h"
+
 
 AWWCharacter::AWWCharacter() {
   PrimaryActorTick.bCanEverTick = true;
@@ -32,7 +37,19 @@ AWWCharacter::AWWCharacter() {
   CameraComp->SetupAttachment(SpringArmComp);
 }
 
-void AWWCharacter::BeginPlay() { Super::BeginPlay(); }
+void AWWCharacter::BeginPlay() {
+  Super::BeginPlay();
+
+  if (APlayerController *PC = Cast<APlayerController>(Controller)) {
+    if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
+            ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+                PC->GetLocalPlayer())) {
+      if (DefaultMappingContext) {
+        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+      }
+    }
+  }
+}
 
 void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
@@ -48,20 +65,23 @@ void AWWCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-  PlayerInputComponent->BindAxis("MoveForward", this,
-                                 &AWWCharacter::MoveForward);
-  PlayerInputComponent->BindAxis("MoveRight", this, &AWWCharacter::MoveRight);
-}
-
-void AWWCharacter::MoveForward(float Value) {
-  if (Value != 0.0f) {
-    AddMovementInput(GetActorForwardVector(), Value);
+  if (UEnhancedInputComponent *EnhancedInput =
+          Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
+    if (MoveAction) {
+      EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this,
+                                &AWWCharacter::Move);
+    }
   }
 }
 
-void AWWCharacter::MoveRight(float Value) {
-  if (Value != 0.0f) {
-    AddMovementInput(GetActorRightVector(), Value);
+void AWWCharacter::Move(const FInputActionValue &Value) {
+  FVector2D MovementVector = Value.Get<FVector2D>();
+
+  if (Controller != nullptr) {
+    AddMovementInput(GetActorForwardVector(), MovementVector.Y);
+    AddMovementInput(GetActorRightVector(), MovementVector.X);
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Moving: %s"),
+           *MovementVector.ToString());
   }
 }
 
