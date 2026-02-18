@@ -83,18 +83,29 @@ void AWWCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-  UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SetupPlayerInputComponent Called"));
+  UE_LOG(LogTemp, Warning,
+         TEXT("[DEBUG] SetupPlayerInputComponent Called | Component: %s"),
+         PlayerInputComponent ? *PlayerInputComponent->GetClass()->GetName()
+                              : TEXT("NULL"));
 
   if (UEnhancedInputComponent *EnhancedInput =
           Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] EnhancedInputComponent Detected"));
     if (MoveAction) {
       EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this,
                                 &AWWCharacter::Move);
-      UE_LOG(LogTemp, Warning, TEXT("[DEBUG] MoveAction Bound"));
+      UE_LOG(LogTemp, Warning, TEXT("[DEBUG] MoveAction Bound: %s"),
+             *MoveAction->GetName());
     } else {
       UE_LOG(LogTemp, Error,
              TEXT("[DEBUG] MoveAction is NULL in SetupPlayerInputComponent"));
     }
+  } else {
+    UE_LOG(LogTemp, Error,
+           TEXT("[DEBUG] FAILED to cast to EnhancedInputComponent! Actual "
+                "Class: %s"),
+           PlayerInputComponent ? *PlayerInputComponent->GetClass()->GetName()
+                                : TEXT("NULL"));
   }
 }
 

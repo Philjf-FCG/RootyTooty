@@ -3,7 +3,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "WWCharacter.h"
 
-
 AWWEnemy::AWWEnemy() {
   PrimaryActorTick.bCanEverTick = true;
 
@@ -15,7 +14,14 @@ AWWEnemy::AWWEnemy() {
   GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 }
 
-void AWWEnemy::BeginPlay() { Super::BeginPlay(); }
+void AWWEnemy::BeginPlay() {
+  Super::BeginPlay();
+  if (GetCharacterMovement()) {
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    UE_LOG(LogTemp, Warning,
+           TEXT("[DEBUG] Bandit %s initialized to MOVE_Walking"), *GetName());
+  }
+}
 
 void AWWEnemy::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);

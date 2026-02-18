@@ -2,12 +2,15 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "WWEnemy.h"
+#include "WWPlayerController.h"
 
 AWWGameMode::AWWGameMode() {
   PrimaryActorTick.bCanEverTick = true;
   SpawnInterval = 2.0f;
   SpawnRadius = 1500.0f;
   SpawnTimer = 0.0f;
+
+  PlayerControllerClass = AWWPlayerController::StaticClass();
 }
 
 void AWWGameMode::BeginPlay() { Super::BeginPlay(); }
