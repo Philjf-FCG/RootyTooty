@@ -5,13 +5,13 @@ def simple_check():
     
     # 1. Check Plugin State
     try:
-        plugin_sub = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+        unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
         # Using a more direct lookup for the class
         ei_class = unreal.load_class(None, "/Script/EnhancedInput.EnhancedInputComponent")
         if ei_class:
-            print(f"SUCCESS: EnhancedInputComponent class is LOADED.")
+            print("SUCCESS: EnhancedInputComponent class is LOADED.")
         else:
-            print(f"FAILED: EnhancedInputComponent class is NOT LOADED.")
+            print("FAILED: EnhancedInputComponent class is NOT LOADED.")
     except Exception as e:
         print(f"ERROR checking class: {e}")
 

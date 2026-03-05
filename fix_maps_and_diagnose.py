@@ -1,5 +1,4 @@
 import unreal
-import os
 
 def diagnose_and_fix():
     report = []
@@ -34,7 +33,7 @@ def diagnose_and_fix():
         components = unreal.EditorFilterLibrary.by_class(cdo.get_editor_property("root_component").get_children_components(True), unreal.CameraComponent)
         report.append(f"Camera Components found: {len(components)}")
     else:
-        report.append(f"ERROR: BP_Gunslinger missing!")
+        report.append("ERROR: BP_Gunslinger missing!")
 
     report.append("--- DIAGNOSIS END ---")
     

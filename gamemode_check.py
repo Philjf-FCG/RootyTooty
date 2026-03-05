@@ -24,7 +24,8 @@ def check_gamemode_and_controller():
                     if "input" in prop.lower():
                         val = pc_cdo.get_editor_property(prop)
                         print(f"  Controller Property '{prop}': {val}")
-            except: pass
+            except Exception:
+                pass
     else:
         print(f"ERROR: Could not load GameMode at {gm_path}")
 

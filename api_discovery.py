@@ -22,13 +22,15 @@ def api_discovery():
     try:
         if hasattr(unreal, "InputLibrary"):
              print("SUCCESS: unreal.InputLibrary exists.")
-    except: pass
+    except Exception:
+        pass
 
     # 3. Check for EnhancedInputLibrary
     try:
         if hasattr(unreal, "EnhancedInputLibrary"):
              print("SUCCESS: unreal.EnhancedInputLibrary exists.")
-    except: pass
+    except Exception:
+        pass
 
     print("\n--- API DISCOVERY END ---")
 

@@ -15,14 +15,14 @@ def check_engine_input_settings():
         print("ERROR: Could not access InputSettings CDO.")
 
     print("\n--- PLUGIN CHECK ---")
-    plugin_sub = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+    unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
     # Check if EnhancedInput is loaded in the engine
     try:
         if unreal.load_class(None, "/Script/EnhancedInput.EnhancedInputComponent"):
             print("EnhancedInput Classes: LOADED")
         else:
             print("EnhancedInput Classes: NOT LOADED")
-    except:
+    except Exception:
         print("EnhancedInput Classes: LOAD ERROR")
 
     print("\n--- END CHECK ---")

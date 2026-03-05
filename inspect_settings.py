@@ -18,7 +18,7 @@ def inspect_input_settings():
         try:
             val = cdo.get_editor_property(f)
             print(f"Property: {f} | Value: {val.get_name() if hasattr(val, 'get_name') else val}")
-        except:
+        except Exception:
             print(f"Property: {f} | (Found but not readable)")
 
     print("--- END ---")

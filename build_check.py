@@ -34,26 +34,29 @@ def build_status_check():
             found = False
             # Method 1: getattr (Pascal)
             try:
-                val = getattr(cdo, pascal)
+                getattr(cdo, pascal)
                 print(f"  [FOUND] {pascal} (via getattr)")
                 found = True
-            except: pass
+            except Exception:
+                pass
             
             # Method 2: getattr (Snake)
             if not found:
                 try:
-                    val = getattr(cdo, snake)
+                    getattr(cdo, snake)
                     print(f"  [FOUND] {snake} (via getattr snake_case)")
                     found = True
-                except: pass
+                except Exception:
+                    pass
                 
             # Method 3: get_editor_property
             if not found:
                 try:
-                    val = cdo.get_editor_property(pascal)
+                    cdo.get_editor_property(pascal)
                     print(f"  [FOUND] {pascal} (via get_editor_property)")
                     found = True
-                except: pass
+                except Exception:
+                    pass
                 
             if not found:
                 print(f"  [MISSING] {pascal} (Checked all methods)")

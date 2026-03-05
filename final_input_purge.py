@@ -46,12 +46,14 @@ def final_input_purge():
             print(f"Mapping {key_name}...")
             # Discover working Key creation
             key = None
-            try: key = unreal.KismetInputLibrary.make_key(key_name)
-            except: 
-                try: 
+            try:
+                key = unreal.KismetInputLibrary.make_key(key_name)
+            except Exception:
+                try:
                     key = unreal.Key()
                     key.set_editor_property("key_name", key_name)
-                except: pass
+                except Exception:
+                    pass
             
             if not key:
                 print(f"  [FAIL] Could not create key {key_name}")

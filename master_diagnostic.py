@@ -47,7 +47,7 @@ def diagnose_world():
             # We can't easily iterate BP components via Python CDC, 
             # but we can check properties if they are exposed.
             pass
-        except:
+        except Exception:
             pass
     else:
         print("  ERROR: BP_Gunslinger not found")
@@ -75,7 +75,7 @@ def diagnose_world():
     try:
         aa_method = render_settings.get_editor_property("default_anti_aliasing_method")
         print(f"  Anti-Aliasing Method: {aa_method}")
-    except:
+    except Exception:
         pass
 
     print("\n--- MASTER DIAGNOSTIC END ---")

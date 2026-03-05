@@ -73,3 +73,14 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+GameAnimationSample/
+
+# Python cache/artifacts
+__pycache__/
+*.pyc
+
+# Local diagnostics/push artifacts
+push_output.log
+
+# Local raw import source files (not Unreal assets)
+Assets/

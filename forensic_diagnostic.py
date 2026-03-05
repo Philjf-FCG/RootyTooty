@@ -56,13 +56,13 @@ def forensic_diagnostic():
     # 4. Light & Exposure Analysis
     lights = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Light)
     print(f"\nLights Found: {len(lights)}")
-    for l in lights:
+    for light_actor in lights:
         try:
-            lc = l.light_component
+            lc = light_actor.light_component
             intensity = lc.intensity
-            print(f"  - {l.get_actor_label()} ({l.get_class().get_name()}) | {intensity}")
-        except:
-            print(f"  - {l.get_actor_label()} | Property access failed")
+            print(f"  - {light_actor.get_actor_label()} ({light_actor.get_class().get_name()}) | {intensity}")
+        except Exception:
+            print(f"  - {light_actor.get_actor_label()} | Property access failed")
 
     print("\n--- FORENSIC DIAGNOSTIC END ---")
 

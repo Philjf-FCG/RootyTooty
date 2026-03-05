@@ -13,7 +13,7 @@ def check_character_bp_robust():
     print(f"Blueprint Class: {bp_path}")
     
     # List all properties that might be relevant
-    properties = unreal.ControlRigBlueprint.get_all_properties(char_class) if hasattr(unreal, 'ControlRigBlueprint') else []
+    unreal.ControlRigBlueprint.get_all_properties(char_class) if hasattr(unreal, 'ControlRigBlueprint') else []
     # If standard listing fails, we use dir() on the CDO and filter
     members = dir(cdo)
     
@@ -24,7 +24,7 @@ def check_character_bp_robust():
             try:
                 val = cdo.get_editor_property(m)
                 print(f"Prop: {m} | Value: {val}")
-            except:
+            except Exception:
                 # Some things might be functions, ignore
                 pass
 

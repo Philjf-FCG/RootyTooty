@@ -38,8 +38,9 @@ def gameplay_diagnostic():
             print(f"GameMode Default Pawn: {pawn_class.get_name() if pawn_class else 'NONE'}")
             
             enemy_class = cdo.get_editor_property("EnemyClass")
-            print(f"GameMode Enemy Class: {enemy_class.get_name() if enemy_class else 'NONE (Enemies won't spawn!)'}")
-        except:
+            enemy_name = enemy_class.get_name() if enemy_class else "NONE (Enemies won't spawn!)"
+            print(f"GameMode Enemy Class: {enemy_name}")
+        except Exception:
             print("Failed to read GameMode properties.")
     else:
         print(f"Could not load GameMode at {gm_path}")

@@ -42,7 +42,8 @@ def ultimate_victory_fix():
     floor.set_actor_scale3d(unreal.Vector(100, 100, 1))
     comp = floor.static_mesh_component
     mesh = unreal.load_asset("/Engine/BasicShapes/Plane")
-    if mesh: comp.set_static_mesh(mesh)
+    if mesh:
+        comp.set_static_mesh(mesh)
     
     # SUN
     sun = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0,0,5000))
@@ -91,9 +92,6 @@ def ultimate_victory_fix():
 
     level_sub.save_current_level()
     print("ULTIMATE_FIX (5.7): SUCCESS! Map & GameMode refreshed. Check BP_WWCharacter and PRESS PLAY! 🤠")
-
-if __name__ == "__main__":
-    ultimate_victory_fix()
 
 if __name__ == "__main__":
     ultimate_victory_fix()

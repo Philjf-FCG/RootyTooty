@@ -20,7 +20,8 @@ def fix_input_integrity():
     try:
         ia.set_editor_property("triggers", [])
         print("  - IA_Move triggers cleared.")
-    except: pass
+    except Exception:
+        pass
 
     # 2. Purge and Re-create Mappings in IMC
     # 'Null input trigger' often lives inside the 'mappings' of the IMC.

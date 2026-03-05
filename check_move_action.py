@@ -14,7 +14,7 @@ def check_move_action():
     try:
         ma = cdo.get_editor_property("move_action")
         print(f"MoveAction Property (move_action): {ma.get_name() if ma else 'NULL'}")
-    except:
+    except Exception:
         try:
             ma = cdo.get_editor_property("MoveAction")
             print(f"MoveAction Property (MoveAction): {ma.get_name() if ma else 'NULL'}")
@@ -25,7 +25,8 @@ def check_move_action():
     try:
         imc = cdo.get_editor_property("default_mapping_context")
         print(f"MappingContext Property: {imc.get_name() if imc else 'NULL'}")
-    except: pass
+    except Exception:
+        pass
 
     # If NULL, we can try to fix it automatically here
     if not ma:
@@ -36,7 +37,8 @@ def check_move_action():
                 cdo.set_editor_property("move_action", ia_asset)
                 print("  [SUCCESS] IA_Move assigned to CDO.")
                 unreal.EditorAssetLibrary.save_loaded_asset(cdo)
-            except: pass
+            except Exception:
+                pass
     
     if not imc:
         print("ACTION: Attempting to assign IMC_Default automatically...")
@@ -46,7 +48,8 @@ def check_move_action():
                 cdo.set_editor_property("default_mapping_context", imc_asset)
                 print("  [SUCCESS] IMC_Default assigned to CDO.")
                 unreal.EditorAssetLibrary.save_loaded_asset(cdo)
-            except: pass
+            except Exception:
+                pass
 
     print("--- CHECK END ---")
 

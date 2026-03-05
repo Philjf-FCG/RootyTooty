@@ -14,7 +14,7 @@ def verify_gamemode_assets():
         if enemy_class:
             print(f"Enemy Class: {enemy_class.get_full_name()} | [OK]")
         else:
-            print(f"Enemy Class: [MISSING / NULL] | <--- PROBLEM HERE")
+            print("Enemy Class: [MISSING / NULL] | <--- PROBLEM HERE")
             
         # Also check spawn parameters
         spawn_interval = cdo.get_editor_property("spawn_interval")

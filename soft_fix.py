@@ -20,8 +20,8 @@ def soft_fix():
         return unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, bp_folder, unreal.Blueprint, factory)
 
     # 1. Ensure BPs exist
-    char_bp = get_or_create_bp("BP_WWCharacter", "WWCharacter")
-    enemy_bp = get_or_create_bp("BP_Bandit", "WWEnemy")
+    get_or_create_bp("BP_WWCharacter", "WWCharacter")
+    get_or_create_bp("BP_Bandit", "WWEnemy")
     gm_bp = get_or_create_bp("BP_WWGameMode", "WWGameMode")
 
     # 2. Configure GameMode

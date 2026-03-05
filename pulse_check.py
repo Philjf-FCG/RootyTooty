@@ -19,16 +19,16 @@ def final_pulse_check():
     try:
         # Some versions use Key('W')
         w_key = unreal.Key('W')
-    except:
+    except Exception:
         try:
             # Some versions use Key(name='W')
             w_key = unreal.Key(name='W')
-        except:
+        except Exception:
             try:
                 # Some versions require empty constructor then property set
                 w_key = unreal.Key()
                 w_key.set_editor_property('key_name', 'W')
-            except:
+            except Exception:
                 pass
 
     if not w_key:

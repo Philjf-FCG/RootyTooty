@@ -35,7 +35,7 @@ def final_fix_visibility():
     sun_comp.set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
     
     # Sky Atmosphere (Makes it blue, not grey)
-    sky = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0,0,0))
+    unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0,0,0))
     
     # Sky Light
     skylight = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0,0,0))

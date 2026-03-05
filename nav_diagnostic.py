@@ -41,7 +41,7 @@ def nav_diagnostic():
                     speed = cmc.get_editor_property("max_walk_speed")
                     is_active = cmc.is_active()
                     velocity = cmc.velocity
-                    gravity = cmc.get_editor_property("gravity_scale")
+                    cmc.get_editor_property("gravity_scale")
                     movement_mode = cmc.get_editor_property("movement_mode")
                     print(f"    Movement: Active={is_active} | Mode={movement_mode} | MaxSpeed={speed} | Velocity={velocity}")
                 else:

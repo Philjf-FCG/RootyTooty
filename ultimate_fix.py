@@ -4,7 +4,6 @@ def ultimate_fix():
     unreal.log("ULTIMATE_FIX: Starting total system reset...")
     
     level_sub = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
-    asset_lib = unreal.EditorAssetLibrary
     
     # 1. New Level to avoid any hidden actor/corruption
     map_path = "/Game/Maps/UltimaMap"
@@ -46,15 +45,19 @@ def ultimate_fix():
     # Lens/Distortion
     s.set_editor_property("override_lens_distortion_intensity", True)
     # Note: Property name might vary by version, but we'll try common ones
-    try: s.set_editor_property("lens_distortion_intensity", 0.0)
-    except: pass
+    try:
+        s.set_editor_property("lens_distortion_intensity", 0.0)
+    except Exception:
+        pass
     
     s.set_editor_property("override_scene_fringe_intensity", True)
     s.set_editor_property("scene_fringe_intensity", 0.0)
     
     s.set_editor_property("override_chromatic_aberration_intensity", True)
-    try: s.set_editor_property("chromatic_aberration_intensity", 0.0)
-    except: pass
+    try:
+        s.set_editor_property("chromatic_aberration_intensity", 0.0)
+    except Exception:
+        pass
 
     # Blur/Motion
     s.set_editor_property("override_motion_blur_amount", True)
@@ -75,8 +78,10 @@ def ultimate_fix():
     
     # FOV/Projection
     s.set_editor_property("override_field_of_view", True)
-    try: s.set_editor_property("field_of_view", 90.0)
-    except: pass
+    try:
+        s.set_editor_property("field_of_view", 90.0)
+    except Exception:
+        pass
 
     pp.set_editor_property("settings", s)
 

@@ -22,19 +22,22 @@ def resilient_input_fix():
         # Try KismetInputLibrary first (Common for UE Python)
         try:
             return unreal.KismetInputLibrary.make_key(name)
-        except: pass
+        except Exception:
+            pass
         
         # Try Property Setting on empty Key
         try:
             k = unreal.Key()
             k.set_editor_property('key_name', name)
             return k
-        except: pass
+        except Exception:
+            pass
         
         # Try cast from string if that's a thing in this version
         try:
             return unreal.Key(name)
-        except: pass
+        except Exception:
+            pass
         
         return None
 

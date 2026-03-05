@@ -29,8 +29,8 @@ def force_setup():
             return new_bp
         return None
 
-    char_bp = create_bp("BP_WWCharacter", "WWCharacter")
-    enemy_bp = create_bp("BP_Bandit", "WWEnemy")
+    create_bp("BP_WWCharacter", "WWCharacter")
+    create_bp("BP_Bandit", "WWEnemy")
     gm_bp = create_bp("BP_WWGameMode", "WWGameMode")
 
     # 4. Configure GameMode
@@ -60,8 +60,9 @@ def force_setup():
             # The property for GameMode override is 'default_game_mode'
             settings.set_editor_property("default_game_mode", gm_bp.generated_class())
             unreal.EditorLevelLibrary.save_current_level()
-            report.append(f"SUCCESS: Set GameMode in MainMap settings")
-    else: report.append("ERROR: MainMap not found")
+            report.append("SUCCESS: Set GameMode in MainMap settings")
+    else:
+        report.append("ERROR: MainMap not found")
 
     # Write report
     with open("D:/Unreal Projects/RootyTooty/force_setup_report.txt", "w") as f:

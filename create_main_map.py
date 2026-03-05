@@ -31,13 +31,13 @@ def create_main_map():
     light.set_actor_rotation(unreal.Rotator(-45, 0, 0), True)
 
     # 3. Add a Sky Atmosphere
-    sky_atm = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0))
+    unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0))
     
     # 4. Add a Sky Light
-    sky_light = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 0))
+    unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 0))
 
     # 5. Add a Player Start
-    player_start = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, 0, 100))
+    unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, 0, 100))
 
     # Save the level
     unreal.EditorLevelLibrary.save_current_level()

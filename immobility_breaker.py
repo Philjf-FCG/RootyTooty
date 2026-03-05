@@ -26,7 +26,8 @@ def break_immobility_v3():
     ]
     
     for cls in char_classes:
-        if not cls: continue
+        if not cls:
+            continue
         actors = unreal.GameplayStatics.get_all_actors_of_class(world, cls)
         for a in actors:
             cmc = a.get_component_by_class(unreal.CharacterMovementComponent)

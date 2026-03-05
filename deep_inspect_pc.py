@@ -20,12 +20,13 @@ def deep_inspect():
     # Find anything that stores a class
     print("\n[POTENTIAL CLASS PROPERTIES]")
     for m in members:
-        if m.startswith("_"): continue
+        if m.startswith("_"):
+            continue
         try:
             val = cdo.get_editor_property(m)
             if isinstance(val, unreal.Class) or (val and "class" in str(type(val)).lower()):
                 print(f"Property: {m} | Value: {val.get_name() if hasattr(val, 'get_name') else val}")
-        except:
+        except Exception:
             pass
 
     # Find anything related to input

@@ -20,7 +20,8 @@ def create_via_new():
         report.append("SUCCESS: Added Floor")
 
     ps = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0,0,100))
-    if ps: ps.set_actor_label("PlayerStart")
+    if ps:
+        ps.set_actor_label("PlayerStart")
     
     # Save
     unreal.EditorLevelLibrary.save_current_level()

@@ -4,6 +4,10 @@
 #include "GameFramework/Character.h"
 #include "WWEnemy.generated.h"
 
+class UAnimMontage;
+class UAnimationAsset;
+class UStaticMeshComponent;
+
 UCLASS()
 class ROOTYTOOTY_API AWWEnemy : public ACharacter {
   GENERATED_BODY()
@@ -28,6 +32,15 @@ protected:
   UPROPERTY(EditAnywhere, Category = "Stats")
   float XPReward;
 
+  UPROPERTY(EditAnywhere, Category = "Animation")
+  UAnimMontage *IdleMontage;
+
+  UPROPERTY(EditAnywhere, Category = "Animation")
+  UAnimMontage *RunMontage;
+
+  UPROPERTY(EditAnywhere, Category = "Animation")
+  UAnimMontage *AttackMontage;
+
   virtual float TakeDamage(float DamageAmount,
                            struct FDamageEvent const &DamageEvent,
                            class AController *EventInstigator,
@@ -35,4 +48,14 @@ protected:
 
 private:
   void Die();
+  bool bIsMoving;
+  bool bUsingMoveAnimation;
+  UAnimationAsset *IdleAnimationAsset;
+  UAnimationAsset *MoveAnimationAsset;
+
+  UPROPERTY(VisibleAnywhere, Category = "Visual")
+  UStaticMeshComponent *HatBrimComp;
+
+  UPROPERTY(VisibleAnywhere, Category = "Visual")
+  UStaticMeshComponent *HatCrownComp;
 };

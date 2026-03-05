@@ -33,7 +33,7 @@ def final_recovery_check():
                 ma = pawn.get_editor_property("MoveAction")
                 print(f"  Pawn IMC Assigned: {'SET' if imc else 'MISSING'}")
                 print(f"  Pawn MoveAction Assigned: {'SET' if ma else 'MISSING'}")
-            except:
+            except Exception:
                 print("  Note: Could not read Pawn properties directly (Blueprint/C++ mismatch or protected)")
         else:
             print("Controlled Pawn: NONE (Character exists but is not possessed by you!)")

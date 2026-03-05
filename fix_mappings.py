@@ -50,7 +50,7 @@ def fix_input_mappings_v2():
                         mapping.modifiers.append(unreal.InputModifierSwizzleAxis())
                     if k["negate"]:
                         mapping.modifiers.append(unreal.InputModifierNegate())
-                except:
+                except Exception:
                     print(f"  [NOTE] Could not auto-add modifiers for {key_name}. Please add them manually.")
             else:
                 print(f"  [FAILED] Could not map {key_name}. Asset might be locked.")
