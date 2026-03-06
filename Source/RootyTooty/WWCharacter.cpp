@@ -86,6 +86,7 @@ AWWCharacter::AWWCharacter() {
 
   // Fix character facing (Characters in UE usually need -90 Yaw to face +X)
   if (GetMesh()) {
+    GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
     GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
   }
 }
@@ -117,6 +118,8 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetSkeletalMesh(MannyMesh);
       CharacterMesh->SetVisibility(true);
       CharacterMesh->SetHiddenInGame(false);
+      CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
+      CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
           UMaterialInterface::StaticClass(), nullptr,
@@ -162,11 +165,35 @@ void AWWCharacter::BeginPlay() {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Manny skeletal mesh for player"));
     }
 
-    // Preserve the animation configuration authored in Blueprint.
-    // Hardcoded mannequin locomotion assets currently emit skeleton errors in automation.
-    IdleAnimationAsset = nullptr;
-    MoveAnimationAsset = nullptr;
-    bUsingMoveAnimation = false;
+    IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+    if (!IdleAnimationAsset) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+    }
+
+    MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+    if (!MoveAnimationAsset) {
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+    }
+
+    if (IdleAnimationAsset) {
+      CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+      CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
+      bUsingMoveAnimation = false;
+    } else {
+      UE_LOG(LogTemp, Warning, TEXT("Failed to load idle locomotion animation for player"));
+    }
+
+    if (!MoveAnimationAsset) {
+      UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for player"));
+    }
 
     UStaticMesh *PlayerHatMesh = Cast<UStaticMesh>(StaticLoadObject(
         UStaticMesh::StaticClass(), nullptr,
