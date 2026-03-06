@@ -48,6 +48,7 @@ protected:
 
 private:
   void Die();
+  bool bIsDead;
   bool bIsMoving;
   bool bUsingMoveAnimation;
   UAnimationAsset *IdleAnimationAsset;

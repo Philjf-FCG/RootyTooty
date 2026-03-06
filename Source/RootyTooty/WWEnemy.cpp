@@ -2,6 +2,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -18,6 +19,7 @@ AWWEnemy::AWWEnemy() {
   Health = 50.0f;
   Damage = 10.0f;
   XPReward = 20.0f;
+  bIsDead = false;
   bIsMoving = false;
   bUsingMoveAnimation = false;
   IdleAnimationAsset = nullptr;
@@ -255,14 +257,35 @@ void AWWEnemy::Tick(float DeltaTime) {
 
 float AWWEnemy::TakeDamage(float DamageAmount, FDamageEvent const &DamageEvent,
                            AController *EventInstigator, AActor *DamageCauser) {
+  if (bIsDead || DamageAmount <= 0.0f) {
+    return 0.0f;
+  }
+
+  UE_LOG(LogTemp, Display, TEXT("Enemy %s took damage: %.2f (health before: %.2f)"),
+         *GetName(), DamageAmount, Health);
   Health -= DamageAmount;
-  if (Health <= 0.0f) {
+  UE_LOG(LogTemp, Display, TEXT("Enemy %s health after damage: %.2f"),
+         *GetName(), Health);
+
+  if (Health <= 0.0f && !bIsDead) {
+    bIsDead = true;
     Die();
   }
+
   return DamageAmount;
 }
 
 void AWWEnemy::Die() {
+  UE_LOG(LogTemp, Display, TEXT("Enemy %s died"), *GetName());
+
+  SetActorEnableCollision(false);
+  if (GetCapsuleComponent()) {
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  }
+  if (GetMesh()) {
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  }
+
   AWWCharacter *Player =
       Cast<AWWCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
   if (Player) {
