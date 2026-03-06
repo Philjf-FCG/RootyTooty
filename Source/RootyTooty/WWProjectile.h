@@ -7,6 +7,8 @@
 class USphereComponent;
 class UProjectileMovementComponent;
 class UStaticMeshComponent;
+class UPointLightComponent;
+class UParticleSystemComponent;
 
 UCLASS()
 class ROOTYTOOTY_API AWWProjectile : public AActor {
@@ -14,6 +16,7 @@ class ROOTYTOOTY_API AWWProjectile : public AActor {
 
 public:
   AWWProjectile();
+  virtual void Tick(float DeltaTime) override;
 
 protected:
   virtual void BeginPlay() override;
@@ -26,6 +29,12 @@ protected:
 
   UPROPERTY(VisibleAnywhere, Category = "Projectile")
   UStaticMeshComponent *MeshComp;
+
+  UPROPERTY(VisibleAnywhere, Category = "Projectile")
+  UPointLightComponent *BulletLight;
+
+  UPROPERTY(VisibleAnywhere, Category = "Projectile")
+  UParticleSystemComponent *TrailEffect;
 
   UFUNCTION()
   void OnHit(UPrimitiveComponent *HitComp, AActor *OtherActor,

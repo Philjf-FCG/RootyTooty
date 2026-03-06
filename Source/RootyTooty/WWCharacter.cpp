@@ -20,7 +20,6 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "UObject/ConstructorHelpers.h"
-#include "WWHUD.h"
 #include "WWEnemy.h"
 #include "WWProjectile.h"
 
@@ -34,6 +33,7 @@ AWWCharacter::AWWCharacter() {
   Level = 1;
   FireRate = 1.0f;
   AttackRange = 1000.0f;
+  ProjectileClass = AWWProjectile::StaticClass();
   FireTimer = 0.0f;
   bIsMoving = false;
   bIsAttacking = false;
@@ -56,9 +56,9 @@ AWWCharacter::AWWCharacter() {
   SpringArmComp =
       CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArmComp"));
   SpringArmComp->SetupAttachment(RootComponent);
-  SpringArmComp->TargetArmLength = 1200.0f;
-  SpringArmComp->SetRelativeRotation(FRotator(-60.0f, 0.0f, 0.0f));
-  SpringArmComp->bDoCollisionTest = false; // Usually off for Survivors style
+  SpringArmComp->TargetArmLength = 820.0f;
+  SpringArmComp->SetRelativeRotation(FRotator(-32.0f, 18.0f, 0.0f));
+  SpringArmComp->bDoCollisionTest = true;
 
   // Disable rotation inheritance to prevent screen shake when character turns
   SpringArmComp->bInheritPitch = false;
@@ -67,6 +67,7 @@ AWWCharacter::AWWCharacter() {
 
   CameraComp = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
   CameraComp->SetupAttachment(SpringArmComp);
+  CameraComp->bUsePawnControlRotation = false;
 
   HatBrimComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatBrimComp"));
   HatBrimComp->SetupAttachment(GetMesh());
@@ -91,6 +92,12 @@ AWWCharacter::AWWCharacter() {
 
 void AWWCharacter::BeginPlay() {
   Super::BeginPlay();
+
+  if (!ProjectileClass) {
+    // Keep combat working even if a Blueprint default was cleared.
+    ProjectileClass = AWWProjectile::StaticClass();
+    UE_LOG(LogTemp, Warning, TEXT("ProjectileClass was null at BeginPlay; defaulted to AWWProjectile."));
+  }
 
   CurrentHealth = MaxHealth;
   const FLinearColor SheriffDark = FLinearColor(0.21f, 0.14f, 0.06f, 1.0f);
@@ -155,35 +162,11 @@ void AWWCharacter::BeginPlay() {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Manny skeletal mesh for player"));
     }
 
-    IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-        UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    if (!IdleAnimationAsset) {
-      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    }
-
-    MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-        UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    if (!MoveAnimationAsset) {
-      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    }
-
-    if (IdleAnimationAsset) {
-      CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
-      bUsingMoveAnimation = false;
-    } else {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load idle animation asset for player"));
-    }
-
-    if (!MoveAnimationAsset) {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load move animation asset for player"));
-    }
+    // Preserve the animation configuration authored in Blueprint.
+    // Hardcoded mannequin locomotion assets currently emit skeleton errors in automation.
+    IdleAnimationAsset = nullptr;
+    MoveAnimationAsset = nullptr;
+    bUsingMoveAnimation = false;
 
     UStaticMesh *PlayerHatMesh = Cast<UStaticMesh>(StaticLoadObject(
         UStaticMesh::StaticClass(), nullptr,
@@ -461,11 +444,6 @@ float AWWCharacter::TakeDamage(float DamageAmount,
   CurrentHealth -= ActualDamage;
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Player Health: %f / %f"),
          CurrentHealth, MaxHealth);
-
-  // Update HUD
-  if (AWWHUD *HUD = Cast<AWWHUD>(GetWorld()->GetFirstPlayerController()->GetHUD())) {
-    HUD->UpdateHealth(CurrentHealth, MaxHealth);
-  }
 
   if (CurrentHealth <= 0.0f) {
     Die();

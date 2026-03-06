@@ -117,35 +117,11 @@ void AWWEnemy::BeginPlay() {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Quinn skeletal mesh for enemy"));
     }
 
-    IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-        UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    if (!IdleAnimationAsset) {
-      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    }
-
-    MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-        UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    if (!MoveAnimationAsset) {
-      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    }
-
-    if (IdleAnimationAsset) {
-      EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      EnemyMesh->PlayAnimation(IdleAnimationAsset, true);
-      bUsingMoveAnimation = false;
-    } else {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load idle animation asset for enemy"));
-    }
-
-    if (!MoveAnimationAsset) {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load move animation asset for enemy"));
-    }
+    // Preserve the animation configuration authored in Blueprint.
+    // Hardcoded mannequin locomotion assets currently emit skeleton errors in automation.
+    IdleAnimationAsset = nullptr;
+    MoveAnimationAsset = nullptr;
+    bUsingMoveAnimation = false;
 
     UStaticMesh *EnemyHatMesh = Cast<UStaticMesh>(StaticLoadObject(
         UStaticMesh::StaticClass(), nullptr,

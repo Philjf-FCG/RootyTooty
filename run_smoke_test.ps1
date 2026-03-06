@@ -2,7 +2,8 @@ param(
     [string]$EditorExe = "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe",
     [string]$UProject = "$PSScriptRoot\RootyTooty.uproject",
     [string]$TestName = "Project.Maps.PIE",
-    [string]$LogPath
+    [string]$LogPath,
+    [int]$TimeoutSeconds = 420
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,8 +42,20 @@ $args = @(
     "-AbsLog=`"$LogPath`""
 )
 
-$process = Start-Process -FilePath $EditorExe -ArgumentList $args -Wait -PassThru -NoNewWindow
-$exitCode = $process.ExitCode
+$process = Start-Process -FilePath $EditorExe -ArgumentList $args -PassThru -NoNewWindow
+$timedOut = $false
+
+Wait-Process -Id $process.Id -Timeout $TimeoutSeconds -ErrorAction SilentlyContinue
+if (-not $process.HasExited) {
+    $timedOut = $true
+    Write-Host ""
+    Write-Host "Smoke test timed out after $TimeoutSeconds seconds. Stopping UnrealEditor-Cmd..."
+    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+$process.Refresh()
+$exitCode = if ($process.HasExited) { $process.ExitCode } else { -1 }
 
 $summary = @()
 if (Test-Path $LogPath) {
@@ -59,11 +72,13 @@ if ($summary.Count -gt 0) {
 }
 
 $success = $false
+$failure = $false
 if (Test-Path $LogPath) {
     $success = Select-String -Path $LogPath -Pattern "Test Completed\. Result=\{Success\}|TEST COMPLETE\. EXIT CODE: 0" -CaseSensitive:$false -Quiet
+    $failure = Select-String -Path $LogPath -Pattern "Test Completed\. Result=\{(Fail|Failed|Error|Errors)\}|TEST COMPLETE\. EXIT CODE: [1-9]|No automation tests matched|Setting GIsCriticalError|Fatal error" -CaseSensitive:$false -Quiet
 }
 
-if ($success -and $exitCode -eq 0) {
+if ($success -and -not $failure -and -not $timedOut -and $exitCode -eq 0) {
     Write-Host ""
     Write-Host "Smoke test PASSED."
     exit 0
@@ -71,6 +86,9 @@ if ($success -and $exitCode -eq 0) {
 
 Write-Host ""
 Write-Host "Smoke test FAILED."
+if ($timedOut) {
+    exit 124
+}
 if ($exitCode -ne 0) {
     exit $exitCode
 }
