@@ -23,6 +23,18 @@
 #include "WWEnemy.h"
 #include "WWProjectile.h"
 
+namespace {
+UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (UStaticMesh* Mesh = Cast<UStaticMesh>(
+            StaticLoadObject(UStaticMesh::StaticClass(), nullptr, Path))) {
+      return Mesh;
+    }
+  }
+  return nullptr;
+}
+} // namespace
+
 AWWCharacter::AWWCharacter() {
   PrimaryActorTick.bCanEverTick = true;
 
@@ -101,8 +113,10 @@ void AWWCharacter::BeginPlay() {
   }
 
   CurrentHealth = MaxHealth;
-  const FLinearColor SheriffDark = FLinearColor(0.21f, 0.14f, 0.06f, 1.0f);
-  const FLinearColor SheriffTan = FLinearColor(0.74f, 0.62f, 0.40f, 1.0f);
+  const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
+  const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
+  const FLinearColor SheriffHat = FLinearColor(0.20f, 0.12f, 0.05f, 1.0f);
+  const FLinearColor SheriffBadge = FLinearColor(0.81f, 0.68f, 0.22f, 1.0f);
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
     USkeletalMesh* MannyMesh = Cast<USkeletalMesh>(StaticLoadObject(
@@ -149,7 +163,7 @@ void AWWCharacter::BeginPlay() {
       const int32 MaterialCount = CharacterMesh->GetNumMaterials();
       for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
         if (UMaterialInstanceDynamic *BodyMat = CharacterMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
-          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? SheriffDark : SheriffTan;
+          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? SheriffCoat : SheriffLeather;
           BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
           BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
           BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
@@ -195,30 +209,30 @@ void AWWCharacter::BeginPlay() {
       UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for player"));
     }
 
-    UStaticMesh *PlayerHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-        UStaticMesh::StaticClass(), nullptr,
-        TEXT("/Game/Assets/cowboy.cowboy")));
-    if (!PlayerHatMesh) {
-      PlayerHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-          UStaticMesh::StaticClass(), nullptr,
-          TEXT("/Game/Assets/tophat.tophat")));
-    }
-    if (!PlayerHatMesh) {
-      PlayerHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-          UStaticMesh::StaticClass(), nullptr,
-          TEXT("/Engine/BasicShapes/Cone.Cone")));
-    }
+    UStaticMesh* SheriffHatWhole = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/cowboy.cowboy"),
+      TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
 
-    if (PlayerHatMesh && HatCrownComp) {
-      HatCrownComp->SetStaticMesh(PlayerHatMesh);
+    if (HatCrownComp) {
+      HatCrownComp->SetStaticMesh(SheriffHatWhole);
       HatCrownComp->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
-      HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
-      HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-      HatCrownComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
-      if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
-        HatTopMat->SetVectorParameterValue(FName("Color"), SheriffDark);
-        HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffDark);
-        HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffDark);
+      HatCrownComp->SetVisibility(SheriffHatWhole != nullptr);
+      if (SheriffHatWhole) {
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 4.5f));
+        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+        HatCrownComp->SetRelativeScale3D(FVector(0.26f, 0.26f, 0.26f));
+      } else {
+        HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
+        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
+        HatCrownComp->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+      }
+      if (SheriffHatWhole) {
+        if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
+        HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
+        HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
+        HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
+        HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+        }
       }
     }
 

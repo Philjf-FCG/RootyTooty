@@ -12,6 +12,18 @@
 #include "Kismet/GameplayStatics.h"
 #include "WWCharacter.h"
 
+namespace {
+UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (UStaticMesh* Mesh = Cast<UStaticMesh>(
+            StaticLoadObject(UStaticMesh::StaticClass(), nullptr, Path))) {
+      return Mesh;
+    }
+  }
+  return nullptr;
+}
+} // namespace
+
 AWWEnemy::AWWEnemy() {
   PrimaryActorTick.bCanEverTick = true;
 
@@ -58,8 +70,9 @@ AWWEnemy::AWWEnemy() {
 void AWWEnemy::BeginPlay() {
   Super::BeginPlay();
 
-  const FLinearColor BanditBlack = FLinearColor(0.03f, 0.03f, 0.03f, 1.0f);
-  const FLinearColor BanditGray = FLinearColor(0.10f, 0.10f, 0.10f, 1.0f);
+  const FLinearColor BanditCoat = FLinearColor(0.11f, 0.08f, 0.07f, 1.0f);
+  const FLinearColor BanditDust = FLinearColor(0.28f, 0.22f, 0.16f, 1.0f);
+  const FLinearColor BanditHat = FLinearColor(0.05f, 0.05f, 0.05f, 1.0f);
 
   if (USkeletalMeshComponent* EnemyMesh = GetMesh()) {
     USkeletalMesh* QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
@@ -106,7 +119,7 @@ void AWWEnemy::BeginPlay() {
       const int32 MaterialCount = EnemyMesh->GetNumMaterials();
       for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
         if (UMaterialInstanceDynamic *BodyMat = EnemyMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
-          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? BanditBlack : BanditGray;
+          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? BanditCoat : BanditDust;
           BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
           BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
           BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
@@ -152,30 +165,29 @@ void AWWEnemy::BeginPlay() {
       UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for enemy"));
     }
 
-    UStaticMesh *EnemyHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-        UStaticMesh::StaticClass(), nullptr,
-        TEXT("/Game/Assets/tophat.tophat")));
-    if (!EnemyHatMesh) {
-      EnemyHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-          UStaticMesh::StaticClass(), nullptr,
-          TEXT("/Game/Assets/cowboy.cowboy")));
-    }
-    if (!EnemyHatMesh) {
-      EnemyHatMesh = Cast<UStaticMesh>(StaticLoadObject(
-          UStaticMesh::StaticClass(), nullptr,
-          TEXT("/Engine/BasicShapes/Cone.Cone")));
-    }
+    UStaticMesh* BanditHatWhole = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/tophat.tophat"),
+      TEXT("/Game/Assets/FreeWestern/tophat.tophat")});
 
-    if (EnemyHatMesh && HatCrownComp) {
-      HatCrownComp->SetStaticMesh(EnemyHatMesh);
+    if (HatCrownComp) {
+      HatCrownComp->SetStaticMesh(BanditHatWhole);
       HatCrownComp->AttachToComponent(EnemyMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
-      HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
-      HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-      HatCrownComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
-      if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
-        HatTopMat->SetVectorParameterValue(FName("Color"), BanditBlack);
-        HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditBlack);
-        HatTopMat->SetVectorParameterValue(FName("Tint"), BanditBlack);
+      HatCrownComp->SetVisibility(BanditHatWhole != nullptr);
+      if (BanditHatWhole) {
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 4.2f));
+        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+        HatCrownComp->SetRelativeScale3D(FVector(0.26f, 0.26f, 0.26f));
+      } else {
+        HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
+        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
+        HatCrownComp->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+      }
+      if (BanditHatWhole) {
+        if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
+          HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
+          HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
+          HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
+        }
       }
     }
 
