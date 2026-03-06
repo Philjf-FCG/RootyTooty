@@ -33,6 +33,31 @@ UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   }
   return nullptr;
 }
+
+FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
+  if (!MeshComp) {
+    return FName(TEXT("head"));
+  }
+
+  const FName Candidates[] = {
+      FName(TEXT("head")),
+      FName(TEXT("Head")),
+      FName(TEXT("headSocket")),
+      FName(TEXT("HeadSocket")),
+      FName(TEXT("neck_01"))};
+
+  for (const FName Candidate : Candidates) {
+    if (MeshComp->DoesSocketExist(Candidate)) {
+      return Candidate;
+    }
+    if (MeshComp->GetBoneIndex(Candidate) != INDEX_NONE) {
+      return Candidate;
+    }
+  }
+
+  return FName(TEXT("head"));
+}
+
 } // namespace
 
 AWWCharacter::AWWCharacter() {
@@ -212,15 +237,24 @@ void AWWCharacter::BeginPlay() {
     UStaticMesh* SheriffHatWhole = LoadFirstStaticMesh({
       TEXT("/Game/Assets/cowboy.cowboy"),
       TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
+    if (!SheriffHatWhole) {
+      UE_LOG(LogTemp, Warning, TEXT("Player hat mesh not found at /Game/Assets/cowboy or /Game/Assets/FreeWestern/cowboy"));
+    }
+
+    const FName HatAttachPoint = ResolveHeadAttachPoint(CharacterMesh);
 
     if (HatCrownComp) {
       HatCrownComp->SetStaticMesh(SheriffHatWhole);
-      HatCrownComp->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
+      HatCrownComp->AttachToComponent(
+          CharacterMesh,
+          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+          HatAttachPoint);
       HatCrownComp->SetVisibility(SheriffHatWhole != nullptr);
       if (SheriffHatWhole) {
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 4.5f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-        HatCrownComp->SetRelativeScale3D(FVector(0.26f, 0.26f, 0.26f));
+        // Keep comic size and force brim to horizontal via 90-degree pitch.
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
+        HatCrownComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+        HatCrownComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
       } else {
         HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
@@ -237,7 +271,10 @@ void AWWCharacter::BeginPlay() {
     }
 
     if (HatBrimComp) {
-      HatBrimComp->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
+      HatBrimComp->AttachToComponent(
+          CharacterMesh,
+          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+          HatAttachPoint);
       HatBrimComp->SetStaticMesh(nullptr);
       HatBrimComp->SetVisibility(false);
     }

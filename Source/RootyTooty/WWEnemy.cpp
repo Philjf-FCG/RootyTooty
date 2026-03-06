@@ -22,6 +22,31 @@ UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   }
   return nullptr;
 }
+
+FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
+  if (!MeshComp) {
+    return FName(TEXT("head"));
+  }
+
+  const FName Candidates[] = {
+      FName(TEXT("head")),
+      FName(TEXT("Head")),
+      FName(TEXT("headSocket")),
+      FName(TEXT("HeadSocket")),
+      FName(TEXT("neck_01"))};
+
+  for (const FName Candidate : Candidates) {
+    if (MeshComp->DoesSocketExist(Candidate)) {
+      return Candidate;
+    }
+    if (MeshComp->GetBoneIndex(Candidate) != INDEX_NONE) {
+      return Candidate;
+    }
+  }
+
+  return FName(TEXT("head"));
+}
+
 } // namespace
 
 AWWEnemy::AWWEnemy() {
@@ -166,17 +191,31 @@ void AWWEnemy::BeginPlay() {
     }
 
     UStaticMesh* BanditHatWhole = LoadFirstStaticMesh({
-      TEXT("/Game/Assets/tophat.tophat"),
-      TEXT("/Game/Assets/FreeWestern/tophat.tophat")});
+        TEXT("/Game/Assets/tophat.tophat"),
+        TEXT("/Game/Assets/FreeWestern/tophat.tophat"),
+        TEXT("/Game/Assets/cowboy.cowboy"),
+        TEXT("/Game/Assets/FreeWestern/bertish.bertish"),
+        TEXT("/Game/Assets/FreeWestern/berie.berie"),
+        TEXT("/Game/Assets/FreeWestern/bonnet.bonnet"),
+        TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
+    if (!BanditHatWhole) {
+      UE_LOG(LogTemp, Warning, TEXT("Enemy hat mesh not found. Tried tophat and fallback hats in /Game/Assets/FreeWestern."));
+    }
+
+    const FName HatAttachPoint = ResolveHeadAttachPoint(EnemyMesh);
 
     if (HatCrownComp) {
       HatCrownComp->SetStaticMesh(BanditHatWhole);
-      HatCrownComp->AttachToComponent(EnemyMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
+      HatCrownComp->AttachToComponent(
+          EnemyMesh,
+          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+          HatAttachPoint);
       HatCrownComp->SetVisibility(BanditHatWhole != nullptr);
       if (BanditHatWhole) {
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 4.2f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-        HatCrownComp->SetRelativeScale3D(FVector(0.26f, 0.26f, 0.26f));
+        // Keep comic size and force brim to horizontal via 90-degree pitch.
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
+        HatCrownComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+        HatCrownComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
       } else {
         HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
@@ -192,7 +231,10 @@ void AWWEnemy::BeginPlay() {
     }
 
     if (HatBrimComp) {
-      HatBrimComp->AttachToComponent(EnemyMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FName(TEXT("head")));
+      HatBrimComp->AttachToComponent(
+          EnemyMesh,
+          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+          HatAttachPoint);
       HatBrimComp->SetStaticMesh(nullptr);
       HatBrimComp->SetVisibility(false);
     }
