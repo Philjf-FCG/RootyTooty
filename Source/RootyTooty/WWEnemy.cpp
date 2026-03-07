@@ -53,26 +53,17 @@ void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
     return;
   }
 
+  // Keep transforms deterministic relative to head socket.
   HatComp->SetRelativeScale3D(FVector(UniformScale, UniformScale, UniformScale));
   HatComp->SetRelativeRotation(LocalRotation);
-
-  FVector Origin = FVector::ZeroVector;
-  FVector Extent = FVector::ZeroVector;
-  HatComp->GetLocalBounds(Origin, Extent);
-
-  // Correct offset based on rotated pivot so hats stay anchored to head socket.
-  const FVector ScaledOrigin = Origin * UniformScale;
-  const FVector PivotFix = -LocalRotation.RotateVector(ScaledOrigin);
-  const float Lift = FMath::Clamp((Extent.Z * UniformScale * 0.45f) + BaseLift, 2.0f, 18.0f);
-  const FVector FinalOffset = PivotFix + FVector(0.0f, 0.0f, Lift);
-
-  HatComp->SetRelativeLocation(FinalOffset);
+  HatComp->SetRelativeLocation(FVector(0.0f, 0.0f, BaseLift));
 }
 
 } // namespace
 
 AWWEnemy::AWWEnemy() {
   PrimaryActorTick.bCanEverTick = true;
+  PrimaryActorTick.TickInterval = 0.05f;
 
   MoveSpeed = 300.0f;
   Health = 50.0f;
@@ -235,7 +226,7 @@ void AWWEnemy::BeginPlay() {
       HatCrownComp->SetVisibility(BanditHatWhole != nullptr);
       if (BanditHatWhole) {
         // Pitch keeps brim horizontal; roll flips from upside-down to upright.
-        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 4.0f);
+        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 8.0f);
       } else {
         HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
@@ -262,8 +253,6 @@ void AWWEnemy::BeginPlay() {
 
   if (GetCharacterMovement()) {
     GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-    UE_LOG(LogTemp, Warning,
-           TEXT("[DEBUG] Bandit %s initialized to MOVE_Walking"), *GetName());
   }
 
   // Animation Blueprint handles locomotion automatically
@@ -318,14 +307,6 @@ void AWWEnemy::Tick(float DeltaTime) {
                                     GetController(), this, nullptr);
     }
 
-    static float LogTimer = 0.0f;
-    LogTimer += DeltaTime;
-    if (LogTimer >= 2.0f) {
-      UE_LOG(LogTemp, Warning,
-             TEXT("[DEBUG] Bandit %s moving towards player. Dist: %f"),
-             *GetName(), Distance); // Log actual distance
-      LogTimer = 0.0f;
-    }
   }
 }
 

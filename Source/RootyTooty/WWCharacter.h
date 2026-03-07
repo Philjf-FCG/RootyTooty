@@ -93,12 +93,14 @@ protected:
 
 private:
   float FireTimer;
+  float EnemySearchCooldownTimer;
   bool bIsMoving;
   bool bIsAttacking;
   bool bUsingMoveAnimation;
   bool bShowAnimationDebug;
   UAnimationAsset *IdleAnimationAsset;
   UAnimationAsset *MoveAnimationAsset;
+  TWeakObjectPtr<class AWWEnemy> CachedEnemyTarget;
 
   void Move(const FInputActionValue &Value);
   void MoveForward(float Value);

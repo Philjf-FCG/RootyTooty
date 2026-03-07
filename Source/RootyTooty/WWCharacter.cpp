@@ -64,20 +64,10 @@ void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
     return;
   }
 
+  // Keep transforms deterministic relative to head socket.
   HatComp->SetRelativeScale3D(FVector(UniformScale, UniformScale, UniformScale));
   HatComp->SetRelativeRotation(LocalRotation);
-
-  FVector Origin = FVector::ZeroVector;
-  FVector Extent = FVector::ZeroVector;
-  HatComp->GetLocalBounds(Origin, Extent);
-
-  // Correct offset based on rotated pivot so hats stay anchored to head socket.
-  const FVector ScaledOrigin = Origin * UniformScale;
-  const FVector PivotFix = -LocalRotation.RotateVector(ScaledOrigin);
-  const float Lift = FMath::Clamp((Extent.Z * UniformScale * 0.45f) + BaseLift, 2.0f, 18.0f);
-  const FVector FinalOffset = PivotFix + FVector(0.0f, 0.0f, Lift);
-
-  HatComp->SetRelativeLocation(FinalOffset);
+  HatComp->SetRelativeLocation(FVector(0.0f, 0.0f, BaseLift));
 }
 
 } // namespace
@@ -94,6 +84,7 @@ AWWCharacter::AWWCharacter() {
   AttackRange = 1000.0f;
   ProjectileClass = AWWProjectile::StaticClass();
   FireTimer = 0.0f;
+  EnemySearchCooldownTimer = 0.0f;
   bIsMoving = false;
   bIsAttacking = false;
   bUsingMoveAnimation = false;
@@ -274,7 +265,7 @@ void AWWCharacter::BeginPlay() {
       HatCrownComp->SetVisibility(SheriffHatWhole != nullptr);
       if (SheriffHatWhole) {
         // Pitch keeps brim horizontal; roll flips from upside-down to upright.
-        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 4.0f);
+        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 8.0f);
       } else {
         HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
@@ -356,6 +347,8 @@ void AWWCharacter::PossessedBy(AController *NewController) {
 void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
+  EnemySearchCooldownTimer = FMath::Max(0.0f, EnemySearchCooldownTimer - DeltaTime);
+
   // Animation Blueprint handles locomotion automatically based on velocity
   // Just track movement state for other systems if needed
   FVector Velocity = GetCharacterMovement()->Velocity;
@@ -384,26 +377,15 @@ void AWWCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-  UE_LOG(LogTemp, Warning,
-         TEXT("[DEBUG] SetupPlayerInputComponent Called | Component: %s"),
-         PlayerInputComponent ? *PlayerInputComponent->GetClass()->GetName()
-                              : TEXT("NULL"));
-
   if (UEnhancedInputComponent *EnhancedInput =
           Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] EnhancedInputComponent Detected"));
     if (MoveAction) {
       EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this,
                                 &AWWCharacter::Move);
-      UE_LOG(LogTemp, Warning, TEXT("[DEBUG] MoveAction Bound: %s"),
-             *MoveAction->GetName());
     } else {
       UE_LOG(LogTemp, Error,
              TEXT("[DEBUG] MoveAction is NULL in SetupPlayerInputComponent"));
     }
-  } else {
-    UE_LOG(LogTemp, Warning,
-           TEXT("[DEBUG] Falling back to Legacy InputComponent"));
   }
 
   // Legacy Fallback (Works with standard InputComponent)
@@ -420,9 +402,6 @@ void AWWCharacter::Move(const FInputActionValue &Value) {
     AddMovementInput(FVector::XAxisVector, MovementVector.Y);
     AddMovementInput(FVector::YAxisVector, MovementVector.X);
     bIsMoving = !MovementVector.IsNearlyZero();
-    UE_LOG(LogTemp, Warning,
-           TEXT("[DEBUG] Enhanced Move Called | X: %f, Y: %f (World Space)"),
-           MovementVector.X, MovementVector.Y);
   }
 }
 
@@ -431,8 +410,6 @@ void AWWCharacter::MoveForward(float Value) {
     // Fixed world direction
     AddMovementInput(FVector::XAxisVector, Value);
     bIsMoving = true;
-    UE_LOG(LogTemp, Warning,
-           TEXT("[DEBUG] Legacy MoveForward: %f (World Space)"), Value);
   }
 }
 
@@ -441,8 +418,6 @@ void AWWCharacter::MoveRight(float Value) {
     // Fixed world direction
     AddMovementInput(FVector::YAxisVector, Value);
     bIsMoving = true;
-    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Legacy MoveRight: %f (World Space)"),
-           Value);
   }
 }
 
@@ -466,10 +441,7 @@ void AWWCharacter::AutoAttack() {
   if (Target) {
     // Play attack animation
     PlayAttackAnimation();
-    
-    UE_LOG(LogTemp, Warning, TEXT("=========== FIRING BULLET ==========="));
-    UE_LOG(LogTemp, Warning, TEXT("ProjectileClass is: %s"), ProjectileClass ? *ProjectileClass->GetName() : TEXT("NULL - PROBLEM!"));
-    
+
     if (ProjectileClass) {
       FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
       ToTarget.Z = 0.0f;
@@ -485,25 +457,28 @@ void AWWCharacter::AutoAttack() {
       SpawnParams.Instigator = GetInstigator();
       SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-      AWWProjectile *Proj = GetWorld()->SpawnActor<AWWProjectile>(
+      GetWorld()->SpawnActor<AWWProjectile>(
           ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
-      
-      if (Proj) {
-        UE_LOG(LogTemp, Warning, TEXT("PROJECTILE SPAWNED SUCCESSFULLY: %s"), *Proj->GetName());
-      } else {
-        UE_LOG(LogTemp, Error, TEXT("PROJECTILE SPAWN FAILED!"));
-      }
     } else {
       // FALLBACK: Instant damage
-      UE_LOG(LogTemp, Error, TEXT("NO PROJECTILE CLASS SET! Using instant damage fallback"));
       UGameplayStatics::ApplyDamage(Target, 20.0f, GetController(), this, nullptr);
     }
-  } else {
-    UE_LOG(LogTemp, Warning, TEXT("No target found for auto-attack"));
   }
 }
 
 AWWEnemy *AWWCharacter::FindNearestEnemy() {
+  if (CachedEnemyTarget.IsValid()) {
+    AWWEnemy* CachedEnemy = CachedEnemyTarget.Get();
+    if (CachedEnemy && GetDistanceTo(CachedEnemy) <= AttackRange) {
+      return CachedEnemy;
+    }
+    CachedEnemyTarget = nullptr;
+  }
+
+  if (EnemySearchCooldownTimer > 0.0f) {
+    return nullptr;
+  }
+
   TArray<AActor *> FoundEnemies;
   UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWWEnemy::StaticClass(),
                                         FoundEnemies);
@@ -518,6 +493,9 @@ AWWEnemy *AWWCharacter::FindNearestEnemy() {
       NearestEnemy = Cast<AWWEnemy>(Actor);
     }
   }
+
+  CachedEnemyTarget = NearestEnemy;
+  EnemySearchCooldownTimer = 0.25f;
 
   return NearestEnemy;
 }

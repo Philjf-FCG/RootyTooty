@@ -11,7 +11,7 @@
 #include "WWEnemy.h"
 
 AWWProjectile::AWWProjectile() {
-  PrimaryActorTick.bCanEverTick = true;
+  PrimaryActorTick.bCanEverTick = false;
 
   CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComp"));
   CollisionComp->InitSphereRadius(15.0f);
@@ -96,9 +96,7 @@ void AWWProjectile::BeginPlay() {
   }
 }
 
-void AWWProjectile::Tick(float DeltaTime) {
-  Super::Tick(DeltaTime);
-}
+void AWWProjectile::Tick(float DeltaTime) { Super::Tick(DeltaTime); }
 
 void AWWProjectile::OnHit(UPrimitiveComponent *HitComp, AActor *OtherActor,
                           UPrimitiveComponent *OtherComp, FVector NormalImpulse,
