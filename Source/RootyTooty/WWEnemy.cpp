@@ -47,6 +47,28 @@ FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
   return FName(TEXT("head"));
 }
 
+void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
+                    const FRotator& LocalRotation, float BaseLift) {
+  if (!HatComp || !HatComp->GetStaticMesh()) {
+    return;
+  }
+
+  HatComp->SetRelativeScale3D(FVector(UniformScale, UniformScale, UniformScale));
+  HatComp->SetRelativeRotation(LocalRotation);
+
+  FVector Origin = FVector::ZeroVector;
+  FVector Extent = FVector::ZeroVector;
+  HatComp->GetLocalBounds(Origin, Extent);
+
+  // Correct offset based on rotated pivot so hats stay anchored to head socket.
+  const FVector ScaledOrigin = Origin * UniformScale;
+  const FVector PivotFix = -LocalRotation.RotateVector(ScaledOrigin);
+  const float Lift = FMath::Clamp((Extent.Z * UniformScale * 0.45f) + BaseLift, 2.0f, 18.0f);
+  const FVector FinalOffset = PivotFix + FVector(0.0f, 0.0f, Lift);
+
+  HatComp->SetRelativeLocation(FinalOffset);
+}
+
 } // namespace
 
 AWWEnemy::AWWEnemy() {
@@ -212,10 +234,8 @@ void AWWEnemy::BeginPlay() {
           HatAttachPoint);
       HatCrownComp->SetVisibility(BanditHatWhole != nullptr);
       if (BanditHatWhole) {
-        // Keep comic size and force brim to horizontal via 90-degree pitch.
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
-        HatCrownComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
-        HatCrownComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
+        // Pitch keeps brim horizontal; roll flips from upside-down to upright.
+        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 4.0f);
       } else {
         HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
