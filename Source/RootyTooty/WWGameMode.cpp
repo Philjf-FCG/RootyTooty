@@ -6,10 +6,8 @@
 
 AWWGameMode::AWWGameMode() {
   PrimaryActorTick.bCanEverTick = true;
-  PrimaryActorTick.TickInterval = 0.1f;
-  SpawnInterval = 3.0f;
+  SpawnInterval = 2.0f;
   SpawnRadius = 1500.0f;
-  MaxAliveEnemies = 10;
   SpawnTimer = 0.0f;
 
   PlayerControllerClass = AWWPlayerController::StaticClass();
@@ -36,13 +34,7 @@ void AWWGameMode::SpawnEnemy() {
   }
 
   if (!EnemyClass) {
-    UE_LOG(LogTemp, Error, TEXT("SpawnEnemy: EnemyClass is NULL"));
-    return;
-  }
-
-  TArray<AActor*> ExistingEnemies;
-  UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWWEnemy::StaticClass(), ExistingEnemies);
-  if (ExistingEnemies.Num() >= MaxAliveEnemies) {
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] SpawnEnemy: EnemyClass is NULL"));
     return;
   }
 
@@ -63,6 +55,6 @@ void AWWGameMode::SpawnEnemy() {
     // UE_LOG(LogTemp, Warning, TEXT("[DEBUG] SpawnEnemy: Success Spawned %s at
     // %s"), *NewEnemy->GetName(), *SpawnLocation.ToString());
   } else {
-    UE_LOG(LogTemp, Error, TEXT("SpawnEnemy: FAILED to SpawnActor"));
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] SpawnEnemy: FAILED to SpawnActor"));
   }
 }

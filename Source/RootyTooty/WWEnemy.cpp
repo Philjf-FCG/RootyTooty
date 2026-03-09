@@ -63,7 +63,6 @@ void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
 
 AWWEnemy::AWWEnemy() {
   PrimaryActorTick.bCanEverTick = true;
-  PrimaryActorTick.TickInterval = 0.05f;
 
   MoveSpeed = 300.0f;
   Health = 50.0f;
@@ -253,6 +252,8 @@ void AWWEnemy::BeginPlay() {
 
   if (GetCharacterMovement()) {
     GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    UE_LOG(LogTemp, Warning,
+           TEXT("[DEBUG] Bandit %s initialized to MOVE_Walking"), *GetName());
   }
 
   // Animation Blueprint handles locomotion automatically
@@ -305,6 +306,15 @@ void AWWEnemy::Tick(float DeltaTime) {
     if (Distance < 100.0f) {
       UGameplayStatics::ApplyDamage(PlayerPawn, Damage * DeltaTime,
                                     GetController(), this, nullptr);
+    }
+
+    static float LogTimer = 0.0f;
+    LogTimer += DeltaTime;
+    if (LogTimer >= 2.0f) {
+      UE_LOG(LogTemp, Warning,
+             TEXT("[DEBUG] Bandit %s moving towards player. Dist: %f"),
+             *GetName(), Distance); // Log actual distance
+      LogTimer = 0.0f;
     }
 
   }

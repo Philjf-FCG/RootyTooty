@@ -11,7 +11,7 @@
 #include "WWEnemy.h"
 
 AWWProjectile::AWWProjectile() {
-  PrimaryActorTick.bCanEverTick = false;
+  PrimaryActorTick.bCanEverTick = true;
 
   CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComp"));
   CollisionComp->InitSphereRadius(15.0f);

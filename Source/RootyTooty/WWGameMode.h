@@ -25,9 +25,6 @@ protected:
   UPROPERTY(EditAnywhere, Category = "Spawning")
   float SpawnRadius;
 
-  UPROPERTY(EditAnywhere, Category = "Spawning")
-  int32 MaxAliveEnemies;
-
 private:
   float SpawnTimer;
 
