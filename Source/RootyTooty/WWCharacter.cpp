@@ -34,6 +34,16 @@ UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   return nullptr;
 }
 
+UMaterialInterface* LoadFirstMaterial(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (UMaterialInterface* Mat = Cast<UMaterialInterface>(
+            StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, Path))) {
+      return Mat;
+    }
+  }
+  return nullptr;
+}
+
 FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
   if (!MeshComp) {
     return FName(TEXT("head"));
@@ -281,11 +291,18 @@ void AWWCharacter::BeginPlay() {
         HatCrownComp->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
       }
       if (SheriffHatWhole) {
-        if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
-        HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
-        HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
-        HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
-        HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+        UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
+            TEXT("/Game/HatLooks/Materials/M_PlayerHat_Velvet.M_PlayerHat_Velvet"),
+            TEXT("/Game/HatLooks/Materials/M_velvet_2_1k.M_velvet_2_1k"),
+            TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
+
+        if (VelvetHatMat) {
+          HatCrownComp->SetMaterial(0, VelvetHatMat);
+        } else if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
+          HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
+          HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
+          HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
+          HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
         }
       }
     }

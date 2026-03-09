@@ -9,9 +9,12 @@ ENV_TEXTURE_DEST_ROOT = "/Game/Environment/Textures"
 ENV_MATERIAL_DEST_ROOT = "/Game/Environment/Materials"
 CHAR_TEXTURE_DEST_ROOT = "/Game/CharacterLooks/Textures"
 CHAR_MATERIAL_DEST_ROOT = "/Game/CharacterLooks/Materials"
+HAT_TEXTURE_DEST_ROOT = "/Game/HatLooks/Textures"
+HAT_MATERIAL_DEST_ROOT = "/Game/HatLooks/Materials"
 MAP_PATH = "/Game/Maps/VictoryMap"
 ENV_ZIP_HINTS = ["sand", "rock", "boulder", "badlands", "desert", "dune", "ground"]
 CHAR_ZIP_HINTS = ["leather", "jeans", "plaid", "cloth", "fabric"]
+HAT_ZIP_HINTS = ["velvet", "fabric", "hat"]
 
 
 def log(msg):
@@ -28,7 +31,7 @@ def _find_zip_files():
     project_zips = [
         os.path.join(PROJECT_DIR, name)
         for name in os.listdir(PROJECT_DIR)
-        if name.lower().endswith("-ue.zip")
+        if name.lower().endswith(".zip") and (name.lower().endswith("-ue.zip") or "1k" in name.lower())
     ]
 
     candidates = project_zips
@@ -36,7 +39,7 @@ def _find_zip_files():
         candidates = [
             os.path.join(DOWNLOADS_DIR, name)
             for name in os.listdir(DOWNLOADS_DIR)
-            if name.lower().endswith("-ue.zip")
+            if name.lower().endswith(".zip") and (name.lower().endswith("-ue.zip") or "1k" in name.lower())
         ]
 
     if not candidates:
@@ -48,6 +51,7 @@ def _find_zip_files():
 def _split_zip_groups(zip_files):
     env_zips = []
     char_zips = []
+    hat_zips = []
     for zp in zip_files:
         name = os.path.basename(zp).lower()
         if any(h in name for h in ENV_ZIP_HINTS):
@@ -55,8 +59,11 @@ def _split_zip_groups(zip_files):
             continue
         if any(h in name for h in CHAR_ZIP_HINTS):
             char_zips.append(zp)
+            continue
+        if any(h in name for h in HAT_ZIP_HINTS):
+            hat_zips.append(zp)
 
-    return env_zips, char_zips
+    return env_zips, char_zips, hat_zips
 
 
 def _extract_zip(zip_path):
@@ -317,17 +324,43 @@ def _apply_character_materials_to_map(character_materials):
     log(f"Applied character materials: player comps={player_hits}, enemy comps={enemy_hits}")
 
 
+def _publish_hat_runtime_materials(hat_materials):
+    player_hat = _pick_material(hat_materials, ["velvet"])
+    enemy_hat = _pick_material(hat_materials, ["fabric"])
+
+    player_dst = f"{HAT_MATERIAL_DEST_ROOT}/M_PlayerHat_Velvet"
+    enemy_dst = f"{HAT_MATERIAL_DEST_ROOT}/M_EnemyHat_Fabric"
+
+    if player_hat:
+        player_src = player_hat.get_path_name()
+        if unreal.EditorAssetLibrary.does_asset_exist(player_dst):
+            unreal.EditorAssetLibrary.delete_asset(player_dst)
+        unreal.EditorAssetLibrary.duplicate_asset(player_src, player_dst)
+        log(f"Published player hat material: {player_dst}")
+    else:
+        log("Could not resolve velvet material for player hat")
+
+    if enemy_hat:
+        enemy_src = enemy_hat.get_path_name()
+        if unreal.EditorAssetLibrary.does_asset_exist(enemy_dst):
+            unreal.EditorAssetLibrary.delete_asset(enemy_dst)
+        unreal.EditorAssetLibrary.duplicate_asset(enemy_src, enemy_dst)
+        log(f"Published enemy hat material: {enemy_dst}")
+    else:
+        log("Could not resolve fabric material for enemy hat")
+
+
 def main():
     zip_files = _find_zip_files()
     if not zip_files:
         unreal.log_error("ENV_TEX: No *-ue.zip files found in Downloads")
         return
 
-    env_zips, char_zips = _split_zip_groups(zip_files)
-    log(f"Found {len(zip_files)} texture zip files (env={len(env_zips)}, char={len(char_zips)})")
+    env_zips, char_zips, hat_zips = _split_zip_groups(zip_files)
+    log(f"Found {len(zip_files)} texture zip files (env={len(env_zips)}, char={len(char_zips)}, hat={len(hat_zips)})")
 
-    if not env_zips and not char_zips:
-        unreal.log_error("ENV_TEX: Found *-ue.zip files but none match environment or character pack names")
+    if not env_zips and not char_zips and not hat_zips:
+        unreal.log_error("ENV_TEX: Found zip files but none match environment, character, or hat pack names")
         return
 
     _ensure_dir(TEMP_EXTRACT_DIR)
@@ -335,9 +368,12 @@ def main():
     unreal.EditorAssetLibrary.make_directory(ENV_MATERIAL_DEST_ROOT)
     unreal.EditorAssetLibrary.make_directory(CHAR_TEXTURE_DEST_ROOT)
     unreal.EditorAssetLibrary.make_directory(CHAR_MATERIAL_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(HAT_TEXTURE_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(HAT_MATERIAL_DEST_ROOT)
 
     env_import_paths = []
     char_import_paths = []
+    hat_import_paths = []
 
     for zip_path in env_zips:
         extracted = _extract_zip(zip_path)
@@ -365,9 +401,23 @@ def main():
         char_import_paths.append(dest)
         log(f"Imported {len(images)} textures from {os.path.basename(zip_path)} -> {dest}")
 
+    for zip_path in hat_zips:
+        extracted = _extract_zip(zip_path)
+        images = _collect_images(extracted)
+        if not images:
+            log(f"No images found in {os.path.basename(zip_path)}")
+            continue
+
+        pack_name = os.path.splitext(os.path.basename(zip_path))[0].replace("-ue", "")
+        dest = f"{HAT_TEXTURE_DEST_ROOT}/{pack_name}"
+        _import_images(images, dest)
+        hat_import_paths.append(dest)
+        log(f"Imported {len(images)} textures from {os.path.basename(zip_path)} -> {dest}")
+
     env_materials = _build_materials_from_imported(env_import_paths, ENV_MATERIAL_DEST_ROOT)
     char_materials = _build_materials_from_imported(char_import_paths, CHAR_MATERIAL_DEST_ROOT)
-    log(f"Created materials: env={len(env_materials)}, char={len(char_materials)}")
+    hat_materials = _build_materials_from_imported(hat_import_paths, HAT_MATERIAL_DEST_ROOT)
+    log(f"Created materials: env={len(env_materials)}, char={len(char_materials)}, hat={len(hat_materials)}")
 
     if env_materials:
         _apply_materials_to_map(env_materials)
@@ -375,12 +425,17 @@ def main():
     if char_materials:
         _apply_character_materials_to_map(char_materials)
 
+    if hat_materials:
+        _publish_hat_runtime_materials(hat_materials)
+
     unreal.EditorAssetLibrary.save_directory(ENV_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
     unreal.EditorAssetLibrary.save_directory(ENV_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
     unreal.EditorAssetLibrary.save_directory(CHAR_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
     unreal.EditorAssetLibrary.save_directory(CHAR_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    unreal.EditorAssetLibrary.save_directory(HAT_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    unreal.EditorAssetLibrary.save_directory(HAT_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
 
-    if env_materials or char_materials:
+    if env_materials or char_materials or hat_materials:
         log("Texture import and material assignment complete")
     else:
         unreal.log_warning("ENV_TEX: No materials were created from imported textures")
