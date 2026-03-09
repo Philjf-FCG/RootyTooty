@@ -162,7 +162,7 @@ void AWWCharacter::BeginPlay() {
   CurrentHealth = MaxHealth;
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
-  const FLinearColor SheriffHat = FLinearColor(0.20f, 0.12f, 0.05f, 1.0f);
+  const FLinearColor SheriffHat = FLinearColor(0.73f, 0.59f, 0.83f, 1.0f);
   const FLinearColor SheriffBadge = FLinearColor(0.81f, 0.68f, 0.22f, 1.0f);
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
@@ -292,17 +292,27 @@ void AWWCharacter::BeginPlay() {
       }
       if (SheriffHatWhole) {
         UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
-            TEXT("/Game/HatLooks/Materials/M_PlayerHat_Velvet.M_PlayerHat_Velvet"),
-            TEXT("/Game/HatLooks/Materials/M_velvet_2_1k.M_velvet_2_1k"),
-            TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
+          TEXT("/Game/HatLooks/Materials/M_PlayerHat_Fabric162_Lilac.M_PlayerHat_Fabric162_Lilac"),
+          TEXT("/Game/HatLooks/Materials/M_fabric_162_basecolor_1k.M_fabric_162_basecolor_1k"),
+          TEXT("/Game/HatLooks/Materials/M_fabric_162.M_fabric_162")});
 
-        if (VelvetHatMat) {
-          HatCrownComp->SetMaterial(0, VelvetHatMat);
-        } else if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
-          HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
-          HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
-          HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
-          HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
+        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
+          if (VelvetHatMat) {
+            HatCrownComp->SetMaterial(MaterialIndex, VelvetHatMat);
+          }
+
+          // Always tint every hat slot so player hats stay red.
+          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
+            HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("BodyColor"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("ClothColor"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), SheriffHat);
+            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+          }
         }
       }
     }

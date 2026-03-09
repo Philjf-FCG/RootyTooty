@@ -127,7 +127,7 @@ def _classify_texture_role(texture_asset_name):
     return "other"
 
 
-def _create_material(material_name, texture_map, material_dest_root):
+def _create_material(material_name, texture_map, material_dest_root, base_color_tint=None):
     material_path = f"{material_dest_root}/{material_name}"
 
     # Recreate materials on each run to keep graph wiring deterministic
@@ -163,7 +163,15 @@ def _create_material(material_name, texture_map, material_dest_root):
     base = texture_map.get("base_color")
     if base:
         node = _add_texture_sample(base)
-        mel.connect_material_property(node, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+        if base_color_tint is not None:
+            tint = mel.create_material_expression(material, unreal.MaterialExpressionConstant3Vector, -250, -260)
+            tint.constant = base_color_tint
+            mul = mel.create_material_expression(material, unreal.MaterialExpressionMultiply, -80, -260)
+            mel.connect_material_expressions(node, "RGB", mul, "A")
+            mel.connect_material_expressions(tint, "", mul, "B")
+            mel.connect_material_property(mul, "", unreal.MaterialProperty.MP_BASE_COLOR)
+        else:
+            mel.connect_material_property(node, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
 
     normal = texture_map.get("normal")
     if normal:
@@ -192,10 +200,23 @@ def _create_material(material_name, texture_map, material_dest_root):
 
 def _build_materials_from_imported(import_dest_paths, material_dest_root):
     created = {}
+    pack_data = _scan_texture_packs(import_dest_paths)
 
+    for pack_key, tex_map in pack_data.items():
+        if "base_color" not in tex_map:
+            continue
+        mat_name = f"M_{pack_key.replace('-', '_')}"
+        mat = _create_material(mat_name, tex_map, material_dest_root)
+        if mat:
+            created[pack_key] = mat
+
+    return created
+
+
+def _scan_texture_packs(import_dest_paths):
+    pack_data = {}
     for dest in import_dest_paths:
         assets = unreal.EditorAssetLibrary.list_assets(dest, recursive=True, include_folder=False)
-        pack_data = {}
 
         for asset_path in assets:
             texture = unreal.load_asset(asset_path)
@@ -211,15 +232,7 @@ def _build_materials_from_imported(import_dest_paths, material_dest_root):
             if role != "other" and role not in pack_data[pack_key]:
                 pack_data[pack_key][role] = texture
 
-        for pack_key, tex_map in pack_data.items():
-            if "base_color" not in tex_map:
-                continue
-            mat_name = f"M_{pack_key.replace('-', '_')}"
-            mat = _create_material(mat_name, tex_map, material_dest_root)
-            if mat:
-                created[pack_key] = mat
-
-    return created
+    return pack_data
 
 
 def _pick_material(materials, preferred_tokens):
@@ -324,30 +337,55 @@ def _apply_character_materials_to_map(character_materials):
     log(f"Applied character materials: player comps={player_hits}, enemy comps={enemy_hits}")
 
 
-def _publish_hat_runtime_materials(hat_materials):
-    player_hat = _pick_material(hat_materials, ["velvet"])
-    enemy_hat = _pick_material(hat_materials, ["fabric"])
+def _publish_hat_runtime_materials(hat_pack_maps):
+    player_key = None
+    enemy_key = None
 
-    player_dst = f"{HAT_MATERIAL_DEST_ROOT}/M_PlayerHat_Velvet"
-    enemy_dst = f"{HAT_MATERIAL_DEST_ROOT}/M_EnemyHat_Fabric"
+    for key in hat_pack_maps.keys():
+        k = key.lower()
+        if player_key is None and "fabric_162" in k:
+            player_key = key
+        if enemy_key is None and "velvet" in k:
+            enemy_key = key
 
-    if player_hat:
-        player_src = player_hat.get_path_name()
-        if unreal.EditorAssetLibrary.does_asset_exist(player_dst):
-            unreal.EditorAssetLibrary.delete_asset(player_dst)
-        unreal.EditorAssetLibrary.duplicate_asset(player_src, player_dst)
-        log(f"Published player hat material: {player_dst}")
+    if player_key is None:
+        for key in hat_pack_maps.keys():
+            if "fabric" in key.lower():
+                player_key = key
+                break
+
+    if enemy_key is None:
+        for key in hat_pack_maps.keys():
+            if "velvet" in key.lower():
+                enemy_key = key
+                break
+
+    player_dst_name = "M_PlayerHat_Fabric162_Lilac"
+    enemy_dst_name = "M_EnemyHat_BlackVelvet"
+
+    if player_key and "base_color" in hat_pack_maps[player_key]:
+        player_mat = _create_material(
+            player_dst_name,
+            hat_pack_maps[player_key],
+            HAT_MATERIAL_DEST_ROOT,
+            unreal.LinearColor(0.73, 0.59, 0.83, 1.0),
+        )
+        if player_mat:
+            log(f"Published player hat material: {HAT_MATERIAL_DEST_ROOT}/{player_dst_name} from {player_key}")
     else:
-        log("Could not resolve velvet material for player hat")
+        log("Could not resolve fabric_162 hat texture pack for player")
 
-    if enemy_hat:
-        enemy_src = enemy_hat.get_path_name()
-        if unreal.EditorAssetLibrary.does_asset_exist(enemy_dst):
-            unreal.EditorAssetLibrary.delete_asset(enemy_dst)
-        unreal.EditorAssetLibrary.duplicate_asset(enemy_src, enemy_dst)
-        log(f"Published enemy hat material: {enemy_dst}")
+    if enemy_key and "base_color" in hat_pack_maps[enemy_key]:
+        enemy_mat = _create_material(
+            enemy_dst_name,
+            hat_pack_maps[enemy_key],
+            HAT_MATERIAL_DEST_ROOT,
+            unreal.LinearColor(0.02, 0.02, 0.02, 1.0),
+        )
+        if enemy_mat:
+            log(f"Published enemy hat material: {HAT_MATERIAL_DEST_ROOT}/{enemy_dst_name} from {enemy_key}")
     else:
-        log("Could not resolve fabric material for enemy hat")
+        log("Could not resolve velvet hat texture pack for enemy")
 
 
 def main():
@@ -417,6 +455,7 @@ def main():
     env_materials = _build_materials_from_imported(env_import_paths, ENV_MATERIAL_DEST_ROOT)
     char_materials = _build_materials_from_imported(char_import_paths, CHAR_MATERIAL_DEST_ROOT)
     hat_materials = _build_materials_from_imported(hat_import_paths, HAT_MATERIAL_DEST_ROOT)
+    hat_pack_maps = _scan_texture_packs(hat_import_paths)
     log(f"Created materials: env={len(env_materials)}, char={len(char_materials)}, hat={len(hat_materials)}")
 
     if env_materials:
@@ -426,7 +465,7 @@ def main():
         _apply_character_materials_to_map(char_materials)
 
     if hat_materials:
-        _publish_hat_runtime_materials(hat_materials)
+        _publish_hat_runtime_materials(hat_pack_maps)
 
     unreal.EditorAssetLibrary.save_directory(ENV_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
     unreal.EditorAssetLibrary.save_directory(ENV_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)

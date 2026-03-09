@@ -119,7 +119,7 @@ void AWWEnemy::BeginPlay() {
 
   const FLinearColor BanditCoat = FLinearColor(0.11f, 0.08f, 0.07f, 1.0f);
   const FLinearColor BanditDust = FLinearColor(0.28f, 0.22f, 0.16f, 1.0f);
-  const FLinearColor BanditHat = FLinearColor(0.05f, 0.05f, 0.05f, 1.0f);
+  const FLinearColor BanditHat = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
   if (USkeletalMeshComponent* EnemyMesh = GetMesh()) {
     USkeletalMesh* QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
@@ -253,16 +253,27 @@ void AWWEnemy::BeginPlay() {
       }
       if (BanditHatWhole) {
         UMaterialInterface* FabricHatMat = LoadFirstMaterial({
-            TEXT("/Game/HatLooks/Materials/M_EnemyHat_Fabric.M_EnemyHat_Fabric"),
-            TEXT("/Game/HatLooks/Materials/M_fabric_162_1k.M_fabric_162_1k"),
-            TEXT("/Game/HatLooks/Materials/M_fabric_162.M_fabric_162")});
+          TEXT("/Game/HatLooks/Materials/M_EnemyHat_BlackVelvet.M_EnemyHat_BlackVelvet"),
+          TEXT("/Game/HatLooks/Materials/M_1k_velvet_2_basecolor.M_1k_velvet_2_basecolor"),
+          TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
 
-        if (FabricHatMat) {
-          HatCrownComp->SetMaterial(0, FabricHatMat);
-        } else if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(0)) {
-          HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
-          HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
-          HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
+        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
+        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
+          if (FabricHatMat) {
+            HatCrownComp->SetMaterial(MaterialIndex, FabricHatMat);
+          }
+
+          // Always tint every hat slot so enemy hats stay black.
+          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
+            HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("BodyColor"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("ClothColor"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), BanditHat);
+            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), BanditHat);
+          }
         }
       }
     }
