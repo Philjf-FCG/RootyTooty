@@ -5,10 +5,13 @@ import unreal
 PROJECT_DIR = unreal.Paths.project_dir()
 DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 TEMP_EXTRACT_DIR = os.path.join(PROJECT_DIR, "Saved", "ImportedEnvTextures")
-TEXTURE_DEST_ROOT = "/Game/Environment/Textures"
-MATERIAL_DEST_ROOT = "/Game/Environment/Materials"
+ENV_TEXTURE_DEST_ROOT = "/Game/Environment/Textures"
+ENV_MATERIAL_DEST_ROOT = "/Game/Environment/Materials"
+CHAR_TEXTURE_DEST_ROOT = "/Game/CharacterLooks/Textures"
+CHAR_MATERIAL_DEST_ROOT = "/Game/CharacterLooks/Materials"
 MAP_PATH = "/Game/Maps/VictoryMap"
 ENV_ZIP_HINTS = ["sand", "rock", "boulder", "badlands", "desert", "dune", "ground"]
+CHAR_ZIP_HINTS = ["leather", "jeans", "plaid", "cloth", "fabric"]
 
 
 def log(msg):
@@ -39,13 +42,21 @@ def _find_zip_files():
     if not candidates:
         return []
 
-    env_only = []
-    for zp in candidates:
-        n = os.path.basename(zp).lower()
-        if any(h in n for h in ENV_ZIP_HINTS):
-            env_only.append(zp)
+    return sorted(candidates)
 
-    return sorted(env_only if env_only else candidates)
+
+def _split_zip_groups(zip_files):
+    env_zips = []
+    char_zips = []
+    for zp in zip_files:
+        name = os.path.basename(zp).lower()
+        if any(h in name for h in ENV_ZIP_HINTS):
+            env_zips.append(zp)
+            continue
+        if any(h in name for h in CHAR_ZIP_HINTS):
+            char_zips.append(zp)
+
+    return env_zips, char_zips
 
 
 def _extract_zip(zip_path):
@@ -109,30 +120,27 @@ def _classify_texture_role(texture_asset_name):
     return "other"
 
 
-def _create_material(material_name, texture_map):
-    material_path = f"{MATERIAL_DEST_ROOT}/{material_name}"
+def _create_material(material_name, texture_map, material_dest_root):
+    material_path = f"{material_dest_root}/{material_name}"
 
+    # Recreate materials on each run to keep graph wiring deterministic
+    # without relying on version-specific graph inspection APIs.
     if unreal.EditorAssetLibrary.does_asset_exist(material_path):
-        material = unreal.load_asset(material_path)
-    else:
-        factory = unreal.MaterialFactoryNew()
-        material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
-            material_name,
-            MATERIAL_DEST_ROOT,
-            unreal.Material,
-            factory,
-        )
+        unreal.EditorAssetLibrary.delete_asset(material_path)
+
+    factory = unreal.MaterialFactoryNew()
+    material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+        material_name,
+        material_dest_root,
+        unreal.Material,
+        factory,
+    )
 
     if not material:
         log(f"Failed to create material {material_name}")
         return None
 
     mel = unreal.MaterialEditingLibrary
-
-    # Clear old graph nodes except root outputs by deleting all expressions.
-    existing_expressions = mel.get_material_expressions(material)
-    for expr in existing_expressions:
-        mel.delete_material_expression(material, expr)
 
     y = -300
 
@@ -175,7 +183,7 @@ def _create_material(material_name, texture_map):
     return material
 
 
-def _build_materials_from_imported(import_dest_paths):
+def _build_materials_from_imported(import_dest_paths, material_dest_root):
     created = {}
 
     for dest in import_dest_paths:
@@ -200,7 +208,7 @@ def _build_materials_from_imported(import_dest_paths):
             if "base_color" not in tex_map:
                 continue
             mat_name = f"M_{pack_key.replace('-', '_')}"
-            mat = _create_material(mat_name, tex_map)
+            mat = _create_material(mat_name, tex_map, material_dest_root)
             if mat:
                 created[pack_key] = mat
 
@@ -255,20 +263,83 @@ def _apply_materials_to_map(materials):
     log(f"Applied materials: floor actors={floor_hits}, rock/dune actors={rock_hits}")
 
 
+def _apply_character_materials_to_map(character_materials):
+    unreal.EditorLevelLibrary.load_level(MAP_PATH)
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    if not world:
+        log("Could not load editor world for character material assignment")
+        return
+
+    jeans_mat = _pick_material(character_materials, ["jeans"])
+    plaid_mat = _pick_material(character_materials, ["plaid"])
+    leather_mat = _pick_material(character_materials, ["leather"])
+
+    if not (jeans_mat or plaid_mat or leather_mat):
+        log("No character materials resolved for player/enemy assignment")
+        return
+
+    actors = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor)
+    player_hits = 0
+    enemy_hits = 0
+
+    for actor in actors:
+        label = actor.get_actor_label().lower()
+        actor_name = actor.get_name().lower()
+        comps = actor.get_components_by_class(unreal.SkeletalMeshComponent)
+        if not comps:
+            continue
+
+        is_enemy = ("bandit" in label or "enemy" in label or "bandit" in actor_name or "enemy" in actor_name)
+        is_player = ("wwcharacter" in label or "player" in label or "wwcharacter" in actor_name or "player" in actor_name)
+
+        if not (is_enemy or is_player):
+            continue
+
+        for comp in comps:
+            if is_player:
+                if jeans_mat:
+                    comp.set_material(0, jeans_mat)
+                if plaid_mat:
+                    comp.set_material(1, plaid_mat)
+                elif leather_mat:
+                    comp.set_material(1, leather_mat)
+                player_hits += 1
+            elif is_enemy:
+                if leather_mat:
+                    comp.set_material(0, leather_mat)
+                if plaid_mat:
+                    comp.set_material(1, plaid_mat)
+                elif jeans_mat:
+                    comp.set_material(1, jeans_mat)
+                enemy_hits += 1
+
+    unreal.EditorLevelLibrary.save_current_level()
+    log(f"Applied character materials: player comps={player_hits}, enemy comps={enemy_hits}")
+
+
 def main():
     zip_files = _find_zip_files()
     if not zip_files:
         unreal.log_error("ENV_TEX: No *-ue.zip files found in Downloads")
         return
 
-    log(f"Found {len(zip_files)} texture zip files")
+    env_zips, char_zips = _split_zip_groups(zip_files)
+    log(f"Found {len(zip_files)} texture zip files (env={len(env_zips)}, char={len(char_zips)})")
+
+    if not env_zips and not char_zips:
+        unreal.log_error("ENV_TEX: Found *-ue.zip files but none match environment or character pack names")
+        return
+
     _ensure_dir(TEMP_EXTRACT_DIR)
-    unreal.EditorAssetLibrary.make_directory(TEXTURE_DEST_ROOT)
-    unreal.EditorAssetLibrary.make_directory(MATERIAL_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(ENV_TEXTURE_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(ENV_MATERIAL_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(CHAR_TEXTURE_DEST_ROOT)
+    unreal.EditorAssetLibrary.make_directory(CHAR_MATERIAL_DEST_ROOT)
 
-    import_paths = []
+    env_import_paths = []
+    char_import_paths = []
 
-    for zip_path in zip_files:
+    for zip_path in env_zips:
         extracted = _extract_zip(zip_path)
         images = _collect_images(extracted)
         if not images:
@@ -276,19 +347,41 @@ def main():
             continue
 
         pack_name = os.path.splitext(os.path.basename(zip_path))[0].replace("-ue", "")
-        dest = f"{TEXTURE_DEST_ROOT}/{pack_name}"
+        dest = f"{ENV_TEXTURE_DEST_ROOT}/{pack_name}"
         _import_images(images, dest)
-        import_paths.append(dest)
+        env_import_paths.append(dest)
         log(f"Imported {len(images)} textures from {os.path.basename(zip_path)} -> {dest}")
 
-    materials = _build_materials_from_imported(import_paths)
-    log(f"Created {len(materials)} materials")
+    for zip_path in char_zips:
+        extracted = _extract_zip(zip_path)
+        images = _collect_images(extracted)
+        if not images:
+            log(f"No images found in {os.path.basename(zip_path)}")
+            continue
 
-    if materials:
-        _apply_materials_to_map(materials)
-        unreal.EditorAssetLibrary.save_directory(TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
-        unreal.EditorAssetLibrary.save_directory(MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
-        log("Texture import and environment material assignment complete")
+        pack_name = os.path.splitext(os.path.basename(zip_path))[0].replace("-ue", "")
+        dest = f"{CHAR_TEXTURE_DEST_ROOT}/{pack_name}"
+        _import_images(images, dest)
+        char_import_paths.append(dest)
+        log(f"Imported {len(images)} textures from {os.path.basename(zip_path)} -> {dest}")
+
+    env_materials = _build_materials_from_imported(env_import_paths, ENV_MATERIAL_DEST_ROOT)
+    char_materials = _build_materials_from_imported(char_import_paths, CHAR_MATERIAL_DEST_ROOT)
+    log(f"Created materials: env={len(env_materials)}, char={len(char_materials)}")
+
+    if env_materials:
+        _apply_materials_to_map(env_materials)
+
+    if char_materials:
+        _apply_character_materials_to_map(char_materials)
+
+    unreal.EditorAssetLibrary.save_directory(ENV_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    unreal.EditorAssetLibrary.save_directory(ENV_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    unreal.EditorAssetLibrary.save_directory(CHAR_TEXTURE_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+    unreal.EditorAssetLibrary.save_directory(CHAR_MATERIAL_DEST_ROOT, only_if_is_dirty=False, recursive=True)
+
+    if env_materials or char_materials:
+        log("Texture import and material assignment complete")
     else:
         unreal.log_warning("ENV_TEX: No materials were created from imported textures")
 

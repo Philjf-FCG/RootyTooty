@@ -146,11 +146,21 @@ void AWWEnemy::BeginPlay() {
             TEXT("/Game/Mannequins/Materials/Quinn/MI_Quinn_02.MI_Quinn_02")));
       }
 
-      if (QuinnMat01) {
-        EnemyMesh->SetMaterial(0, QuinnMat01);
+      UMaterialInterface *LeatherMat = Cast<UMaterialInterface>(StaticLoadObject(
+          UMaterialInterface::StaticClass(), nullptr,
+          TEXT("/Game/CharacterLooks/Materials/M_brown_leather.M_brown_leather")));
+      UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
+          UMaterialInterface::StaticClass(), nullptr,
+          TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+
+      UMaterialInterface *PrimaryEnemyMat = LeatherMat ? LeatherMat : QuinnMat01;
+      UMaterialInterface *SecondaryEnemyMat = PlaidMat ? PlaidMat : QuinnMat02;
+
+      if (PrimaryEnemyMat) {
+        EnemyMesh->SetMaterial(0, PrimaryEnemyMat);
       }
-      if (QuinnMat02) {
-        EnemyMesh->SetMaterial(1, QuinnMat02);
+      if (SecondaryEnemyMat) {
+        EnemyMesh->SetMaterial(1, SecondaryEnemyMat);
       }
 
       const int32 MaterialCount = EnemyMesh->GetNumMaterials();

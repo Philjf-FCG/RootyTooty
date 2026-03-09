@@ -172,7 +172,7 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
-      UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
+        UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
           UMaterialInterface::StaticClass(), nullptr,
           TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));
       if (!MannyMat01) {
@@ -190,11 +190,21 @@ void AWWCharacter::BeginPlay() {
             TEXT("/Game/Mannequins/Materials/Manny/MI_Manny_02_New.MI_Manny_02_New")));
       }
 
-      if (MannyMat01) {
-        CharacterMesh->SetMaterial(0, MannyMat01);
+      UMaterialInterface *JeansMat = Cast<UMaterialInterface>(StaticLoadObject(
+          UMaterialInterface::StaticClass(), nullptr,
+          TEXT("/Game/CharacterLooks/Materials/M_jeans_fabric.M_jeans_fabric")));
+      UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
+          UMaterialInterface::StaticClass(), nullptr,
+          TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+
+      UMaterialInterface *PrimaryPlayerMat = JeansMat ? JeansMat : MannyMat01;
+      UMaterialInterface *SecondaryPlayerMat = PlaidMat ? PlaidMat : MannyMat02;
+
+      if (PrimaryPlayerMat) {
+        CharacterMesh->SetMaterial(0, PrimaryPlayerMat);
       }
-      if (MannyMat02) {
-        CharacterMesh->SetMaterial(1, MannyMat02);
+      if (SecondaryPlayerMat) {
+        CharacterMesh->SetMaterial(1, SecondaryPlayerMat);
       }
 
       const int32 MaterialCount = CharacterMesh->GetNumMaterials();
