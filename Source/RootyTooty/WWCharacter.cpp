@@ -19,6 +19,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "Engine/LocalPlayer.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WWEnemy.h"
 #include "WWProjectile.h"
@@ -94,6 +95,7 @@ AWWCharacter::AWWCharacter() {
   XPToNextLevel = 5.0f;
   FireRate = 1.0f;
   AttackRange = 1000.0f;
+  CriticalHitChance = 0.02f;
   ProjectileClass = AWWProjectile::StaticClass();
   FireTimer = 0.0f;
   bIsMoving = false;
@@ -107,6 +109,7 @@ AWWCharacter::AWWCharacter() {
   FireRateUpgradeLevel = 0;
   AttackRangeUpgradeLevel = 0;
   SkillPointBonusUpgradeLevel = 0;
+  CriticalChanceUpgradeLevel = 0;
   IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
@@ -372,6 +375,7 @@ void AWWCharacter::BeginPlay() {
       }
     }
   }
+
 }
 
 void AWWCharacter::PossessedBy(AController *NewController) {
@@ -387,51 +391,40 @@ void AWWCharacter::PossessedBy(AController *NewController) {
       }
     }
   }
+
 }
 
 void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
-  if (GEngine && IsPlayerControlled()) {
-    const float AttacksPerSecond = (FireRate > KINDA_SMALL_NUMBER) ? (1.0f / FireRate) : 0.0f;
-    const FString HeaderLine = FString::Printf(
-        TEXT("XP: %.1f / %.1f | Level: %d | Skill Points: %d"), XP,
-        XPToNextLevel, Level, SkillPoints);
+  if (GEngine) {
+    FString HeaderLine;
+    TArray<FString> UpgradeLines;
+    TArray<FLinearColor> UpgradeColors;
+    bool bShowChoices = false;
+    TArray<FString> ChoiceLines;
+    TArray<FLinearColor> ChoiceColors;
+    GetUpgradePanelData(HeaderLine, UpgradeLines, UpgradeColors, bShowChoices,
+                        ChoiceLines, ChoiceColors);
 
-    GEngine->AddOnScreenDebugMessage(
-        (uint64)((PTRINT)this + 500), 0.0f, FColor::Green, HeaderLine);
-
-    const FString PanelLine = FString::Printf(
-        TEXT("HP Lv%d | SPD Lv%d | ROF Lv%d | RNG Lv%d | SP Lv%d | APS %.2f"),
-        MaxHealthUpgradeLevel, MoveSpeedUpgradeLevel, FireRateUpgradeLevel,
-        AttackRangeUpgradeLevel, SkillPointBonusUpgradeLevel, AttacksPerSecond);
-    GEngine->AddOnScreenDebugMessage(
-        (uint64)((PTRINT)this + 501), 0.0f, FColor::Cyan, PanelLine);
-
-    if (bAwaitingSkillChoice && CurrentSkillChoices.Num() >= 3) {
-      const FString Choice1 = FString::Printf(
-          TEXT("[1] %s [%s]"),
-          *GetSkillUpgradeLabel(CurrentSkillChoices[0]),
-          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[0]));
-      const FString Choice2 = FString::Printf(
-          TEXT("[2] %s [%s]"),
-          *GetSkillUpgradeLabel(CurrentSkillChoices[1]),
-          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[1]));
-      const FString Choice3 = FString::Printf(
-          TEXT("[3] %s [%s]"),
-          *GetSkillUpgradeLabel(CurrentSkillChoices[2]),
-          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[2]));
-
-      GEngine->AddOnScreenDebugMessage(
-          (uint64)((PTRINT)this + 502), 0.0f,
-          GetSkillUpgradeRarityColor(CurrentSkillChoices[0]), Choice1);
-      GEngine->AddOnScreenDebugMessage(
-          (uint64)((PTRINT)this + 503), 0.0f,
-          GetSkillUpgradeRarityColor(CurrentSkillChoices[1]), Choice2);
-      GEngine->AddOnScreenDebugMessage(
-          (uint64)((PTRINT)this + 504), 0.0f,
-          GetSkillUpgradeRarityColor(CurrentSkillChoices[2]), Choice3);
+    FString DebugHud = HeaderLine;
+    for (const FString& UpgradeLine : UpgradeLines) {
+      DebugHud += TEXT("\n") + UpgradeLine;
     }
+
+    if (bShowChoices && ChoiceLines.Num() >= 3) {
+      DebugHud += TEXT("\nChoose Upgrade:");
+      for (const FString& ChoiceLine : ChoiceLines) {
+        DebugHud += TEXT("\n") + ChoiceLine;
+      }
+    }
+
+    // Stable HUD fallback that remains visible during play.
+    GEngine->AddOnScreenDebugMessage(
+        (uint64)((PTRINT)this) + 7,
+        0.0f,
+        FColor::White,
+        DebugHud);
   }
 
   // Animation Blueprint handles locomotion automatically based on velocity
@@ -561,6 +554,21 @@ void AWWCharacter::AutoAttack() {
     // Play attack animation
     PlayAttackAnimation();
 
+    const bool bIsCriticalHit = FMath::FRand() <= CriticalHitChance;
+    const float ShotDamage = bIsCriticalHit ? 99999.0f : 20.0f;
+
+    if (bIsCriticalHit) {
+      UE_LOG(LogTemp, Warning, TEXT("CRITICAL HIT! One-shot triggered (chance %.2f%%)."),
+             CriticalHitChance * 100.0f);
+      if (GEngine) {
+        GEngine->AddOnScreenDebugMessage(
+            (uint64)((PTRINT)this) + 11,
+            0.35f,
+            FColor::Yellow,
+            TEXT("CRITICAL HIT!"));
+      }
+    }
+
     if (ProjectileClass) {
       FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
       ToTarget.Z = 0.0f;
@@ -576,11 +584,13 @@ void AWWCharacter::AutoAttack() {
       SpawnParams.Instigator = GetInstigator();
       SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-      GetWorld()->SpawnActor<AWWProjectile>(
-          ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+      if (AWWProjectile* SpawnedProjectile = GetWorld()->SpawnActor<AWWProjectile>(
+              ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams)) {
+        SpawnedProjectile->Damage = ShotDamage;
+      }
     } else {
       // FALLBACK: Instant damage
-      UGameplayStatics::ApplyDamage(Target, 20.0f, GetController(), this, nullptr);
+      UGameplayStatics::ApplyDamage(Target, ShotDamage, GetController(), this, nullptr);
     }
   }
 }
@@ -643,7 +653,8 @@ void AWWCharacter::OfferNextSkillChoices() {
       ESkillUpgrade::MoveSpeed,
       ESkillUpgrade::FireRate,
       ESkillUpgrade::AttackRange,
-      ESkillUpgrade::SkillPointBonus};
+      ESkillUpgrade::SkillPointBonus,
+      ESkillUpgrade::CriticalChance};
 
   TArray<ESkillUpgrade> UpgradePool;
   for (ESkillUpgrade Upgrade : AllUpgrades) {
@@ -708,6 +719,7 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
   const float PrevMoveSpeed = MoveSpeed;
   const float PrevFireRate = FireRate;
   const float PrevAttackRange = AttackRange;
+  const float PrevCriticalHitChance = CriticalHitChance;
   const int32 PrevSkillPoints = SkillPoints;
 
   switch (Upgrade) {
@@ -735,6 +747,10 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       SkillPointBonusUpgradeLevel++;
       SkillPoints += 1;
       break;
+    case ESkillUpgrade::CriticalChance:
+      CriticalChanceUpgradeLevel++;
+      CriticalHitChance = FMath::Clamp(CriticalHitChance + 0.03f, 0.0f, 0.45f);
+      break;
     default:
       break;
   }
@@ -742,9 +758,10 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
   UE_LOG(LogTemp, Warning, TEXT("Selected upgrade: %s"),
          *GetSkillUpgradeLabel(Upgrade));
     UE_LOG(LogTemp, Warning,
-      TEXT("Upgrade effect | MaxHP: %.1f->%.1f Move: %.1f->%.1f FireInterval: %.3f->%.3f Range: %.1f->%.1f SkillPoints: %d->%d"),
+      TEXT("Upgrade effect | MaxHP: %.1f->%.1f Move: %.1f->%.1f FireInterval: %.3f->%.3f Range: %.1f->%.1f Crit: %.1f%%->%.1f%% SkillPoints: %d->%d"),
       PrevMaxHealth, MaxHealth, PrevMoveSpeed, MoveSpeed, PrevFireRate,
-      FireRate, PrevAttackRange, AttackRange, PrevSkillPoints, SkillPoints);
+      FireRate, PrevAttackRange, AttackRange, PrevCriticalHitChance * 100.0f,
+      CriticalHitChance * 100.0f, PrevSkillPoints, SkillPoints);
 }
 
 FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
@@ -759,6 +776,8 @@ FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
       return TEXT("Attack Range +200");
     case ESkillUpgrade::SkillPointBonus:
       return TEXT("Skill Point +1");
+    case ESkillUpgrade::CriticalChance:
+      return TEXT("Critical Chance +3% (One-shot)");
     default:
       return TEXT("Unknown Upgrade");
   }
@@ -775,6 +794,8 @@ int32 AWWCharacter::GetSkillUpgradeWeight(ESkillUpgrade Upgrade) const {
     case ESkillUpgrade::FireRate:
       return 10; // Rare
     case ESkillUpgrade::SkillPointBonus:
+      return 5; // Epic
+    case ESkillUpgrade::CriticalChance:
       return 5; // Epic
     default:
       return 1;
@@ -807,6 +828,58 @@ FColor AWWCharacter::GetSkillUpgradeRarityColor(ESkillUpgrade Upgrade) const {
     return FColor(70, 140, 255); // Rare: blue
   }
   return FColor(200, 90, 255); // Epic: magenta
+}
+void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
+                                       TArray<FString>& UpgradeLines,
+                                       TArray<FLinearColor>& UpgradeColors,
+                                       bool& bShowChoices,
+                                       TArray<FString>& ChoiceLines,
+                                       TArray<FLinearColor>& ChoiceColors) const {
+  const float AttacksPerSecond = (FireRate > KINDA_SMALL_NUMBER) ? (1.0f / FireRate) : 0.0f;
+  HeaderLine = FString::Printf(
+      TEXT("XP %.1f / %.1f   |   Level %d   |   Skill Points %d"), XP,
+      XPToNextLevel, Level, SkillPoints);
+
+  UpgradeLines.Reset();
+  UpgradeLines.Reserve(6);
+  UpgradeLines.Add(FString::Printf(TEXT("Max Health:   Lv.%d   (%.0f)"),
+                                   MaxHealthUpgradeLevel, MaxHealth));
+  UpgradeLines.Add(FString::Printf(TEXT("Move Speed:   Lv.%d   (%.0f)"),
+                                   MoveSpeedUpgradeLevel, MoveSpeed));
+  UpgradeLines.Add(FString::Printf(TEXT("Fire Rate:    Lv.%d   (%.2f APS)"),
+                                   FireRateUpgradeLevel, AttacksPerSecond));
+  UpgradeLines.Add(FString::Printf(TEXT("Attack Range: Lv.%d   (%.0f)"),
+                                   AttackRangeUpgradeLevel, AttackRange));
+  UpgradeLines.Add(FString::Printf(TEXT("Skill Bonus:  Lv.%d   (+%d total SP)"),
+                                   SkillPointBonusUpgradeLevel, SkillPoints));
+  UpgradeLines.Add(FString::Printf(TEXT("Critical Hit: Lv.%d   (%.0f%% one-shot chance)"),
+                                   CriticalChanceUpgradeLevel,
+                                   CriticalHitChance * 100.0f));
+
+  UpgradeColors.Reset();
+  UpgradeColors.Reserve(6);
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::MaxHealth).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::MoveSpeed).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::FireRate).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::AttackRange).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::SkillPointBonus).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::CriticalChance).ReinterpretAsLinear());
+
+  bShowChoices = bAwaitingSkillChoice && CurrentSkillChoices.Num() >= 3;
+  ChoiceLines.Reset();
+  ChoiceColors.Reset();
+  if (bShowChoices) {
+    ChoiceLines.Reserve(3);
+    ChoiceColors.Reserve(3);
+
+    for (int32 ChoiceIndex = 0; ChoiceIndex < 3; ++ChoiceIndex) {
+      const ESkillUpgrade ChoiceUpgrade = CurrentSkillChoices[ChoiceIndex];
+      ChoiceLines.Add(FString::Printf(TEXT("[%d] %s [%s]"), ChoiceIndex + 1,
+                                      *GetSkillUpgradeLabel(ChoiceUpgrade),
+                                      *GetSkillUpgradeRarityLabel(ChoiceUpgrade)));
+      ChoiceColors.Add(GetSkillUpgradeRarityColor(ChoiceUpgrade).ReinterpretAsLinear());
+    }
+  }
 }
 
 float AWWCharacter::TakeDamage(float DamageAmount,

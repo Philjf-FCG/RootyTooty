@@ -17,7 +17,8 @@ enum class ESkillUpgrade : uint8 {
   MoveSpeed,
   FireRate,
   AttackRange,
-  SkillPointBonus
+  SkillPointBonus,
+  CriticalChance
 };
 
 UCLASS()
@@ -33,6 +34,12 @@ public:
 
   void AddXP(float Amount);
   void AddSkillPoints(int32 Amount);
+  void GetUpgradePanelData(FString& HeaderLine,
+                           TArray<FString>& UpgradeLines,
+                           TArray<FLinearColor>& UpgradeColors,
+                           bool& bShowChoices,
+                           TArray<FString>& ChoiceLines,
+                           TArray<FLinearColor>& ChoiceColors) const;
   virtual float TakeDamage(float DamageAmount,
                            struct FDamageEvent const &DamageEvent,
                            class AController *EventInstigator,
@@ -91,6 +98,9 @@ protected:
   UPROPERTY(EditAnywhere, Category = "Weapon")
   float AttackRange;
 
+  UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+  float CriticalHitChance;
+
   UPROPERTY(EditAnywhere, Category = "Weapon")
   TSubclassOf<class AWWProjectile> ProjectileClass;
 
@@ -148,4 +158,5 @@ private:
   int32 FireRateUpgradeLevel;
   int32 AttackRangeUpgradeLevel;
   int32 SkillPointBonusUpgradeLevel;
+  int32 CriticalChanceUpgradeLevel;
 };
