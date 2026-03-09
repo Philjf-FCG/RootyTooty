@@ -90,6 +90,8 @@ AWWCharacter::AWWCharacter() {
   CurrentHealth = MaxHealth;
   XP = 0.0f;
   Level = 1;
+  SkillPoints = 0;
+  XPToNextLevel = 5.0f;
   FireRate = 1.0f;
   AttackRange = 1000.0f;
   ProjectileClass = AWWProjectile::StaticClass();
@@ -98,6 +100,13 @@ AWWCharacter::AWWCharacter() {
   bIsAttacking = false;
   bUsingMoveAnimation = false;
   bShowAnimationDebug = false;
+  bAwaitingSkillChoice = false;
+  PendingSkillChoices = 0;
+  MaxHealthUpgradeLevel = 0;
+  MoveSpeedUpgradeLevel = 0;
+  FireRateUpgradeLevel = 0;
+  AttackRangeUpgradeLevel = 0;
+  SkillPointBonusUpgradeLevel = 0;
   IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
@@ -383,6 +392,48 @@ void AWWCharacter::PossessedBy(AController *NewController) {
 void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
+  if (GEngine && IsPlayerControlled()) {
+    const float AttacksPerSecond = (FireRate > KINDA_SMALL_NUMBER) ? (1.0f / FireRate) : 0.0f;
+    const FString HeaderLine = FString::Printf(
+        TEXT("XP: %.1f / %.1f | Level: %d | Skill Points: %d"), XP,
+        XPToNextLevel, Level, SkillPoints);
+
+    GEngine->AddOnScreenDebugMessage(
+        (uint64)((PTRINT)this + 500), 0.0f, FColor::Green, HeaderLine);
+
+    const FString PanelLine = FString::Printf(
+        TEXT("HP Lv%d | SPD Lv%d | ROF Lv%d | RNG Lv%d | SP Lv%d | APS %.2f"),
+        MaxHealthUpgradeLevel, MoveSpeedUpgradeLevel, FireRateUpgradeLevel,
+        AttackRangeUpgradeLevel, SkillPointBonusUpgradeLevel, AttacksPerSecond);
+    GEngine->AddOnScreenDebugMessage(
+        (uint64)((PTRINT)this + 501), 0.0f, FColor::Cyan, PanelLine);
+
+    if (bAwaitingSkillChoice && CurrentSkillChoices.Num() >= 3) {
+      const FString Choice1 = FString::Printf(
+          TEXT("[1] %s [%s]"),
+          *GetSkillUpgradeLabel(CurrentSkillChoices[0]),
+          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[0]));
+      const FString Choice2 = FString::Printf(
+          TEXT("[2] %s [%s]"),
+          *GetSkillUpgradeLabel(CurrentSkillChoices[1]),
+          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[1]));
+      const FString Choice3 = FString::Printf(
+          TEXT("[3] %s [%s]"),
+          *GetSkillUpgradeLabel(CurrentSkillChoices[2]),
+          *GetSkillUpgradeRarityLabel(CurrentSkillChoices[2]));
+
+      GEngine->AddOnScreenDebugMessage(
+          (uint64)((PTRINT)this + 502), 0.0f,
+          GetSkillUpgradeRarityColor(CurrentSkillChoices[0]), Choice1);
+      GEngine->AddOnScreenDebugMessage(
+          (uint64)((PTRINT)this + 503), 0.0f,
+          GetSkillUpgradeRarityColor(CurrentSkillChoices[1]), Choice2);
+      GEngine->AddOnScreenDebugMessage(
+          (uint64)((PTRINT)this + 504), 0.0f,
+          GetSkillUpgradeRarityColor(CurrentSkillChoices[2]), Choice3);
+    }
+  }
+
   // Animation Blueprint handles locomotion automatically based on velocity
   // Just track movement state for other systems if needed
   FVector Velocity = GetCharacterMovement()->Velocity;
@@ -437,6 +488,22 @@ void AWWCharacter::SetupPlayerInputComponent(
   PlayerInputComponent->BindAxis("MoveForward", this,
                                  &AWWCharacter::MoveForward);
   PlayerInputComponent->BindAxis("MoveRight", this, &AWWCharacter::MoveRight);
+
+  // Skill choices remain available while paused during level-up selection.
+  FInputActionBinding &SkillChoice1Binding =
+      PlayerInputComponent->BindAction("SkillChoice1", IE_Pressed, this,
+                                       &AWWCharacter::ChooseSkillOption1);
+  SkillChoice1Binding.bExecuteWhenPaused = true;
+
+  FInputActionBinding &SkillChoice2Binding =
+      PlayerInputComponent->BindAction("SkillChoice2", IE_Pressed, this,
+                                       &AWWCharacter::ChooseSkillOption2);
+  SkillChoice2Binding.bExecuteWhenPaused = true;
+
+  FInputActionBinding &SkillChoice3Binding =
+      PlayerInputComponent->BindAction("SkillChoice3", IE_Pressed, this,
+                                       &AWWCharacter::ChooseSkillOption3);
+  SkillChoice3Binding.bExecuteWhenPaused = true;
 }
 
 void AWWCharacter::Move(const FInputActionValue &Value) {
@@ -538,13 +605,208 @@ AWWEnemy *AWWCharacter::FindNearestEnemy() {
 }
 
 void AWWCharacter::AddXP(float Amount) {
+  if (Amount <= 0.0f) {
+    return;
+  }
+
   XP += Amount;
-  if (XP >= 100.0f) // Simple level up logic
-  {
-    XP -= 100.0f;
+
+  while (XP >= XPToNextLevel) {
+    XP -= XPToNextLevel;
     Level++;
+    XPToNextLevel *= 2.0f;
+    PendingSkillChoices++;
     UE_LOG(LogTemp, Warning, TEXT("Level Up! Current Level: %d"), Level);
   }
+
+  if (!bAwaitingSkillChoice && PendingSkillChoices > 0) {
+    OfferNextSkillChoices();
+  }
+}
+
+void AWWCharacter::AddSkillPoints(int32 Amount) {
+  if (Amount <= 0) {
+    return;
+  }
+
+  SkillPoints += Amount;
+  UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
+}
+
+void AWWCharacter::OfferNextSkillChoices() {
+  if (bAwaitingSkillChoice || PendingSkillChoices <= 0) {
+    return;
+  }
+
+  const ESkillUpgrade AllUpgrades[] = {
+      ESkillUpgrade::MaxHealth,
+      ESkillUpgrade::MoveSpeed,
+      ESkillUpgrade::FireRate,
+      ESkillUpgrade::AttackRange,
+      ESkillUpgrade::SkillPointBonus};
+
+  TArray<ESkillUpgrade> UpgradePool;
+  for (ESkillUpgrade Upgrade : AllUpgrades) {
+    UpgradePool.Add(Upgrade);
+  }
+
+  CurrentSkillChoices.Reset();
+  while (CurrentSkillChoices.Num() < 3 && UpgradePool.Num() > 0) {
+    int32 TotalWeight = 0;
+    for (ESkillUpgrade Upgrade : UpgradePool) {
+      TotalWeight += GetSkillUpgradeWeight(Upgrade);
+    }
+
+    if (TotalWeight <= 0) {
+      const int32 FallbackPickIndex = FMath::RandRange(0, UpgradePool.Num() - 1);
+      CurrentSkillChoices.Add(UpgradePool[FallbackPickIndex]);
+      UpgradePool.RemoveAtSwap(FallbackPickIndex);
+      continue;
+    }
+
+    int32 Roll = FMath::RandRange(1, TotalWeight);
+    int32 PickIndex = 0;
+    for (int32 PoolIndex = 0; PoolIndex < UpgradePool.Num(); ++PoolIndex) {
+      Roll -= GetSkillUpgradeWeight(UpgradePool[PoolIndex]);
+      if (Roll <= 0) {
+        PickIndex = PoolIndex;
+        break;
+      }
+    }
+
+    CurrentSkillChoices.Add(UpgradePool[PickIndex]);
+    UpgradePool.RemoveAtSwap(PickIndex);
+  }
+
+  bAwaitingSkillChoice = CurrentSkillChoices.Num() == 3;
+}
+
+void AWWCharacter::ChooseSkillOption1() { ChooseSkillOptionByIndex(0); }
+
+void AWWCharacter::ChooseSkillOption2() { ChooseSkillOptionByIndex(1); }
+
+void AWWCharacter::ChooseSkillOption3() { ChooseSkillOptionByIndex(2); }
+
+void AWWCharacter::ChooseSkillOptionByIndex(int32 OptionIndex) {
+  if (!bAwaitingSkillChoice || !CurrentSkillChoices.IsValidIndex(OptionIndex)) {
+    return;
+  }
+
+  ApplySkillUpgrade(CurrentSkillChoices[OptionIndex]);
+
+  bAwaitingSkillChoice = false;
+  CurrentSkillChoices.Reset();
+  PendingSkillChoices = FMath::Max(0, PendingSkillChoices - 1);
+
+  if (PendingSkillChoices > 0) {
+    OfferNextSkillChoices();
+  }
+}
+
+void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
+  const float PrevMaxHealth = MaxHealth;
+  const float PrevMoveSpeed = MoveSpeed;
+  const float PrevFireRate = FireRate;
+  const float PrevAttackRange = AttackRange;
+  const int32 PrevSkillPoints = SkillPoints;
+
+  switch (Upgrade) {
+    case ESkillUpgrade::MaxHealth:
+      MaxHealthUpgradeLevel++;
+      MaxHealth += 20.0f;
+      CurrentHealth = FMath::Min(CurrentHealth + 20.0f, MaxHealth);
+      break;
+    case ESkillUpgrade::MoveSpeed:
+      MoveSpeedUpgradeLevel++;
+      MoveSpeed += 50.0f;
+      GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+      break;
+    case ESkillUpgrade::FireRate:
+      FireRateUpgradeLevel++;
+      // Lower interval means faster attacks (10% faster each level).
+      FireRate = FMath::Max(0.15f, FireRate * 0.9f);
+      FireTimer = FMath::Min(FireTimer, FireRate);
+      break;
+    case ESkillUpgrade::AttackRange:
+      AttackRangeUpgradeLevel++;
+      AttackRange += 200.0f;
+      break;
+    case ESkillUpgrade::SkillPointBonus:
+      SkillPointBonusUpgradeLevel++;
+      SkillPoints += 1;
+      break;
+    default:
+      break;
+  }
+
+  UE_LOG(LogTemp, Warning, TEXT("Selected upgrade: %s"),
+         *GetSkillUpgradeLabel(Upgrade));
+    UE_LOG(LogTemp, Warning,
+      TEXT("Upgrade effect | MaxHP: %.1f->%.1f Move: %.1f->%.1f FireInterval: %.3f->%.3f Range: %.1f->%.1f SkillPoints: %d->%d"),
+      PrevMaxHealth, MaxHealth, PrevMoveSpeed, MoveSpeed, PrevFireRate,
+      FireRate, PrevAttackRange, AttackRange, PrevSkillPoints, SkillPoints);
+}
+
+FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
+  switch (Upgrade) {
+    case ESkillUpgrade::MaxHealth:
+      return TEXT("Max Health +20");
+    case ESkillUpgrade::MoveSpeed:
+      return TEXT("Move Speed +50");
+    case ESkillUpgrade::FireRate:
+      return TEXT("Fire Rate +10%");
+    case ESkillUpgrade::AttackRange:
+      return TEXT("Attack Range +200");
+    case ESkillUpgrade::SkillPointBonus:
+      return TEXT("Skill Point +1");
+    default:
+      return TEXT("Unknown Upgrade");
+  }
+}
+
+int32 AWWCharacter::GetSkillUpgradeWeight(ESkillUpgrade Upgrade) const {
+  switch (Upgrade) {
+    case ESkillUpgrade::MaxHealth:
+      return 35; // Common
+    case ESkillUpgrade::MoveSpeed:
+      return 30; // Common
+    case ESkillUpgrade::AttackRange:
+      return 20; // Uncommon
+    case ESkillUpgrade::FireRate:
+      return 10; // Rare
+    case ESkillUpgrade::SkillPointBonus:
+      return 5; // Epic
+    default:
+      return 1;
+  }
+}
+
+FString AWWCharacter::GetSkillUpgradeRarityLabel(ESkillUpgrade Upgrade) const {
+  const int32 Weight = GetSkillUpgradeWeight(Upgrade);
+  if (Weight >= 30) {
+    return TEXT("Common");
+  }
+  if (Weight >= 20) {
+    return TEXT("Uncommon");
+  }
+  if (Weight >= 10) {
+    return TEXT("Rare");
+  }
+  return TEXT("Epic");
+}
+
+FColor AWWCharacter::GetSkillUpgradeRarityColor(ESkillUpgrade Upgrade) const {
+  const int32 Weight = GetSkillUpgradeWeight(Upgrade);
+  if (Weight >= 30) {
+    return FColor(180, 180, 180); // Common: gray
+  }
+  if (Weight >= 20) {
+    return FColor(80, 200, 120); // Uncommon: green
+  }
+  if (Weight >= 10) {
+    return FColor(70, 140, 255); // Rare: blue
+  }
+  return FColor(200, 90, 255); // Epic: magenta
 }
 
 float AWWCharacter::TakeDamage(float DamageAmount,

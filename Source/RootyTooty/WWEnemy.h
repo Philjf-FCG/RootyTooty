@@ -32,6 +32,12 @@ protected:
   UPROPERTY(EditAnywhere, Category = "Stats")
   float XPReward;
 
+  UPROPERTY(EditAnywhere, Category = "Drops")
+  float SkillCrystalDropChance;
+
+  UPROPERTY(EditAnywhere, Category = "Drops")
+  int32 SkillPointsPerCrystal;
+
   UPROPERTY(EditAnywhere, Category = "Animation")
   UAnimMontage *IdleMontage;
 

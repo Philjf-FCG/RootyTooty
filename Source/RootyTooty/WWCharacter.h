@@ -11,6 +11,15 @@ class UAnimMontage;
 class UAnimationAsset;
 class UStaticMeshComponent;
 
+UENUM()
+enum class ESkillUpgrade : uint8 {
+  MaxHealth,
+  MoveSpeed,
+  FireRate,
+  AttackRange,
+  SkillPointBonus
+};
+
 UCLASS()
 class ROOTYTOOTY_API AWWCharacter : public ACharacter {
   GENERATED_BODY()
@@ -23,6 +32,7 @@ public:
       class UInputComponent *PlayerInputComponent) override;
 
   void AddXP(float Amount);
+  void AddSkillPoints(int32 Amount);
   virtual float TakeDamage(float DamageAmount,
                            struct FDamageEvent const &DamageEvent,
                            class AController *EventInstigator,
@@ -34,6 +44,15 @@ public:
 
   UFUNCTION(Exec)
   void ToggleAnimationDebug();
+
+  UFUNCTION(Exec)
+  void ChooseSkillOption1();
+
+  UFUNCTION(Exec)
+  void ChooseSkillOption2();
+
+  UFUNCTION(Exec)
+  void ChooseSkillOption3();
 
 protected:
   virtual void BeginPlay() override;
@@ -59,6 +78,12 @@ protected:
 
   UPROPERTY(BlueprintReadOnly, Category = "Stats")
   int32 Level;
+
+  UPROPERTY(BlueprintReadOnly, Category = "Stats")
+  int32 SkillPoints;
+
+  UPROPERTY(BlueprintReadOnly, Category = "Stats")
+  float XPToNextLevel;
 
   UPROPERTY(EditAnywhere, Category = "Weapon")
   float FireRate;
@@ -106,4 +131,21 @@ private:
   void AutoAttack();
   void PlayAttackAnimation();
   class AWWEnemy *FindNearestEnemy();
+  void OfferNextSkillChoices();
+  void ChooseSkillOptionByIndex(int32 OptionIndex);
+  void ApplySkillUpgrade(ESkillUpgrade Upgrade);
+  FString GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const;
+  int32 GetSkillUpgradeWeight(ESkillUpgrade Upgrade) const;
+  FString GetSkillUpgradeRarityLabel(ESkillUpgrade Upgrade) const;
+  FColor GetSkillUpgradeRarityColor(ESkillUpgrade Upgrade) const;
+
+  bool bAwaitingSkillChoice;
+  int32 PendingSkillChoices;
+  TArray<ESkillUpgrade> CurrentSkillChoices;
+
+  int32 MaxHealthUpgradeLevel;
+  int32 MoveSpeedUpgradeLevel;
+  int32 FireRateUpgradeLevel;
+  int32 AttackRangeUpgradeLevel;
+  int32 SkillPointBonusUpgradeLevel;
 };

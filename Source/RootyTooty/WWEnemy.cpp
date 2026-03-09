@@ -11,6 +11,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "WWCharacter.h"
+#include "WWCrystalPickup.h"
 
 namespace {
 UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
@@ -78,6 +79,8 @@ AWWEnemy::AWWEnemy() {
   Health = 50.0f;
   Damage = 10.0f;
   XPReward = 20.0f;
+  SkillCrystalDropChance = 0.25f;
+  SkillPointsPerCrystal = 1;
   bIsDead = false;
   bIsMoving = false;
   bUsingMoveAnimation = false;
@@ -389,10 +392,24 @@ void AWWEnemy::Die() {
     GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   }
 
-  AWWCharacter *Player =
-      Cast<AWWCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
-  if (Player) {
-    Player->AddXP(XPReward);
+  if (UWorld *World = GetWorld()) {
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride =
+        ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+    const FVector DropLocation = GetActorLocation() + FVector(0.0f, 0.0f, 24.0f);
+    AWWCrystalPickup *Drop = World->SpawnActor<AWWCrystalPickup>(
+        AWWCrystalPickup::StaticClass(), DropLocation, FRotator::ZeroRotator,
+        SpawnParams);
+    if (Drop) {
+      const float ClampedChance = FMath::Clamp(SkillCrystalDropChance, 0.0f, 1.0f);
+      const bool bDropSkillCrystal = FMath::FRand() < ClampedChance;
+
+      Drop->RewardType = bDropSkillCrystal ? ECrystalRewardType::SkillPoint
+                                           : ECrystalRewardType::XP;
+      Drop->XPValue = XPReward;
+      Drop->SkillPointsValue = SkillPointsPerCrystal;
+    }
   }
   Destroy();
 }
