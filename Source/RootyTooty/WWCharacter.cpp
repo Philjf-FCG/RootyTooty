@@ -22,6 +22,7 @@
 #include "Engine/LocalPlayer.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WWEnemy.h"
+#include "WWOrbitingPickaxe.h"
 #include "WWProjectile.h"
 
 namespace {
@@ -91,12 +92,14 @@ AWWCharacter::AWWCharacter() {
   CurrentHealth = MaxHealth;
   XP = 0.0f;
   Level = 1;
-  SkillPoints = 0;
+  SkillPoints = 1;
   XPToNextLevel = 5.0f;
   FireRate = 1.0f;
   AttackRange = 1000.0f;
   CriticalHitChance = 0.02f;
+  BaseShotDamage = 20.0f;
   ProjectileClass = AWWProjectile::StaticClass();
+  OrbitingPickaxeClass = AWWOrbitingPickaxe::StaticClass();
   FireTimer = 0.0f;
   bIsMoving = false;
   bIsAttacking = false;
@@ -110,6 +113,15 @@ AWWCharacter::AWWCharacter() {
   AttackRangeUpgradeLevel = 0;
   SkillPointBonusUpgradeLevel = 0;
   CriticalChanceUpgradeLevel = 0;
+  BulletDamageUpgradeLevel = 0;
+  PickaxeUnlockUpgradeLevel = 0;
+  PickaxeDamageUpgradeLevel = 0;
+  PickaxeSpeedUpgradeLevel = 0;
+  ActivePickaxeCount = 0;
+  PickaxeDamage = 25.0f;
+  PickaxeOrbitRadius = 145.0f;
+  PickaxeOrbitSpeedDegrees = 220.0f;
+  bAutoPickaxeGranted = false;
   IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
@@ -172,6 +184,7 @@ void AWWCharacter::BeginPlay() {
   }
 
   CurrentHealth = MaxHealth;
+  RefreshPickaxeWeapons();
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
   const FLinearColor SheriffHat = FLinearColor(0.73f, 0.59f, 0.83f, 1.0f);
@@ -555,7 +568,7 @@ void AWWCharacter::AutoAttack() {
     PlayAttackAnimation();
 
     const bool bIsCriticalHit = FMath::FRand() <= CriticalHitChance;
-    const float ShotDamage = bIsCriticalHit ? 99999.0f : 20.0f;
+    const float ShotDamage = bIsCriticalHit ? 99999.0f : BaseShotDamage;
 
     if (bIsCriticalHit) {
       UE_LOG(LogTemp, Warning, TEXT("CRITICAL HIT! One-shot triggered (chance %.2f%%)."),
@@ -641,6 +654,23 @@ void AWWCharacter::AddSkillPoints(int32 Amount) {
 
   SkillPoints += Amount;
   UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
+
+  if (!bAutoPickaxeGranted && SkillPoints >= 5) {
+    bAutoPickaxeGranted = true;
+    PickaxeUnlockUpgradeLevel = FMath::Max(PickaxeUnlockUpgradeLevel, 1);
+    ActivePickaxeCount = FMath::Max(ActivePickaxeCount, 2);
+    RefreshPickaxeWeapons();
+
+    UE_LOG(LogTemp, Warning,
+           TEXT("Auto-unlocked spinning pickaxes at 5 skill points."));
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(
+          (uint64)((PTRINT)this) + 13,
+          2.0f,
+          FColor(80, 220, 120),
+          TEXT("Spinning Pickaxes Unlocked!"));
+    }
+  }
 }
 
 void AWWCharacter::OfferNextSkillChoices() {
@@ -654,7 +684,11 @@ void AWWCharacter::OfferNextSkillChoices() {
       ESkillUpgrade::FireRate,
       ESkillUpgrade::AttackRange,
       ESkillUpgrade::SkillPointBonus,
-      ESkillUpgrade::CriticalChance};
+      ESkillUpgrade::CriticalChance,
+      ESkillUpgrade::BulletDamage,
+      ESkillUpgrade::PickaxeUnlock,
+      ESkillUpgrade::PickaxeDamage,
+      ESkillUpgrade::PickaxeSpeed};
 
   TArray<ESkillUpgrade> UpgradePool;
   for (ESkillUpgrade Upgrade : AllUpgrades) {
@@ -703,6 +737,20 @@ void AWWCharacter::ChooseSkillOptionByIndex(int32 OptionIndex) {
     return;
   }
 
+  if (SkillPoints < 1) {
+    UE_LOG(LogTemp, Warning, TEXT("Not enough skill points for upgrade purchase."));
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(
+          (uint64)((PTRINT)this) + 12,
+          1.2f,
+          FColor::Red,
+          TEXT("Need 1 Skill Point to buy upgrade"));
+    }
+    return;
+  }
+
+  SkillPoints -= 1;
+
   ApplySkillUpgrade(CurrentSkillChoices[OptionIndex]);
 
   bAwaitingSkillChoice = false;
@@ -720,6 +768,10 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
   const float PrevFireRate = FireRate;
   const float PrevAttackRange = AttackRange;
   const float PrevCriticalHitChance = CriticalHitChance;
+  const float PrevBaseShotDamage = BaseShotDamage;
+  const int32 PrevPickaxeCount = ActivePickaxeCount;
+  const float PrevPickaxeDamage = PickaxeDamage;
+  const float PrevPickaxeSpeed = PickaxeOrbitSpeedDegrees;
   const int32 PrevSkillPoints = SkillPoints;
 
   switch (Upgrade) {
@@ -751,17 +803,37 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       CriticalChanceUpgradeLevel++;
       CriticalHitChance = FMath::Clamp(CriticalHitChance + 0.03f, 0.0f, 0.45f);
       break;
+    case ESkillUpgrade::BulletDamage:
+      BulletDamageUpgradeLevel++;
+      BaseShotDamage += 5.0f;
+      break;
+    case ESkillUpgrade::PickaxeUnlock:
+      PickaxeUnlockUpgradeLevel++;
+      ActivePickaxeCount = FMath::Clamp(ActivePickaxeCount + 1, 0, 4);
+      break;
+    case ESkillUpgrade::PickaxeDamage:
+      PickaxeDamageUpgradeLevel++;
+      PickaxeDamage += 10.0f;
+      break;
+    case ESkillUpgrade::PickaxeSpeed:
+      PickaxeSpeedUpgradeLevel++;
+      PickaxeOrbitSpeedDegrees += 50.0f;
+      break;
     default:
       break;
   }
 
+  RefreshPickaxeWeapons();
+
   UE_LOG(LogTemp, Warning, TEXT("Selected upgrade: %s"),
          *GetSkillUpgradeLabel(Upgrade));
     UE_LOG(LogTemp, Warning,
-      TEXT("Upgrade effect | MaxHP: %.1f->%.1f Move: %.1f->%.1f FireInterval: %.3f->%.3f Range: %.1f->%.1f Crit: %.1f%%->%.1f%% SkillPoints: %d->%d"),
+      TEXT("Upgrade effect | MaxHP: %.1f->%.1f Move: %.1f->%.1f FireInterval: %.3f->%.3f Range: %.1f->%.1f Crit: %.1f%%->%.1f%% ShotDmg: %.1f->%.1f Pickaxe: %d->%d PickaxeDmg: %.1f->%.1f PickaxeSpeed: %.1f->%.1f SP: %d->%d"),
       PrevMaxHealth, MaxHealth, PrevMoveSpeed, MoveSpeed, PrevFireRate,
       FireRate, PrevAttackRange, AttackRange, PrevCriticalHitChance * 100.0f,
-      CriticalHitChance * 100.0f, PrevSkillPoints, SkillPoints);
+      CriticalHitChance * 100.0f, PrevBaseShotDamage, BaseShotDamage,
+      PrevPickaxeCount, ActivePickaxeCount, PrevPickaxeDamage, PickaxeDamage,
+      PrevPickaxeSpeed, PickaxeOrbitSpeedDegrees, PrevSkillPoints, SkillPoints);
 }
 
 FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
@@ -778,6 +850,14 @@ FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
       return TEXT("Skill Point +1");
     case ESkillUpgrade::CriticalChance:
       return TEXT("Critical Chance +3% (One-shot)");
+    case ESkillUpgrade::BulletDamage:
+      return TEXT("Bullet Damage +5");
+    case ESkillUpgrade::PickaxeUnlock:
+      return TEXT("Spinning Pickaxe +1");
+    case ESkillUpgrade::PickaxeDamage:
+      return TEXT("Pickaxe Damage +10");
+    case ESkillUpgrade::PickaxeSpeed:
+      return TEXT("Pickaxe Spin Speed +50");
     default:
       return TEXT("Unknown Upgrade");
   }
@@ -797,6 +877,14 @@ int32 AWWCharacter::GetSkillUpgradeWeight(ESkillUpgrade Upgrade) const {
       return 5; // Epic
     case ESkillUpgrade::CriticalChance:
       return 5; // Epic
+    case ESkillUpgrade::BulletDamage:
+      return 18; // Uncommon
+    case ESkillUpgrade::PickaxeUnlock:
+      return 10; // Rare
+    case ESkillUpgrade::PickaxeDamage:
+      return 15; // Uncommon/Rare
+    case ESkillUpgrade::PickaxeSpeed:
+      return 14; // Uncommon/Rare
     default:
       return 1;
   }
@@ -841,7 +929,7 @@ void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
       XPToNextLevel, Level, SkillPoints);
 
   UpgradeLines.Reset();
-  UpgradeLines.Reserve(6);
+  UpgradeLines.Reserve(10);
   UpgradeLines.Add(FString::Printf(TEXT("Max Health:   Lv.%d   (%.0f)"),
                                    MaxHealthUpgradeLevel, MaxHealth));
   UpgradeLines.Add(FString::Printf(TEXT("Move Speed:   Lv.%d   (%.0f)"),
@@ -855,15 +943,28 @@ void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
   UpgradeLines.Add(FString::Printf(TEXT("Critical Hit: Lv.%d   (%.0f%% one-shot chance)"),
                                    CriticalChanceUpgradeLevel,
                                    CriticalHitChance * 100.0f));
+  UpgradeLines.Add(FString::Printf(TEXT("Bullet Dmg:   Lv.%d   (%.0f)"),
+                                   BulletDamageUpgradeLevel, BaseShotDamage));
+  UpgradeLines.Add(FString::Printf(TEXT("Pickaxe Qty:  Lv.%d   (%d active)"),
+                                   PickaxeUnlockUpgradeLevel, ActivePickaxeCount));
+  UpgradeLines.Add(FString::Printf(TEXT("Pickaxe Dmg:  Lv.%d   (%.0f)"),
+                                   PickaxeDamageUpgradeLevel, PickaxeDamage));
+  UpgradeLines.Add(FString::Printf(TEXT("Pickaxe Spd:  Lv.%d   (%.0f deg/s)"),
+                                   PickaxeSpeedUpgradeLevel,
+                                   PickaxeOrbitSpeedDegrees));
 
   UpgradeColors.Reset();
-  UpgradeColors.Reserve(6);
+  UpgradeColors.Reserve(10);
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::MaxHealth).ReinterpretAsLinear());
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::MoveSpeed).ReinterpretAsLinear());
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::FireRate).ReinterpretAsLinear());
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::AttackRange).ReinterpretAsLinear());
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::SkillPointBonus).ReinterpretAsLinear());
   UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::CriticalChance).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::BulletDamage).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::PickaxeUnlock).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::PickaxeDamage).ReinterpretAsLinear());
+  UpgradeColors.Add(GetSkillUpgradeRarityColor(ESkillUpgrade::PickaxeSpeed).ReinterpretAsLinear());
 
   bShowChoices = bAwaitingSkillChoice && CurrentSkillChoices.Num() >= 3;
   ChoiceLines.Reset();
@@ -874,10 +975,65 @@ void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
 
     for (int32 ChoiceIndex = 0; ChoiceIndex < 3; ++ChoiceIndex) {
       const ESkillUpgrade ChoiceUpgrade = CurrentSkillChoices[ChoiceIndex];
-      ChoiceLines.Add(FString::Printf(TEXT("[%d] %s [%s]"), ChoiceIndex + 1,
+      ChoiceLines.Add(FString::Printf(TEXT("[%d] %s [%s] (Cost: 1 SP)"), ChoiceIndex + 1,
                                       *GetSkillUpgradeLabel(ChoiceUpgrade),
                                       *GetSkillUpgradeRarityLabel(ChoiceUpgrade)));
       ChoiceColors.Add(GetSkillUpgradeRarityColor(ChoiceUpgrade).ReinterpretAsLinear());
+    }
+  }
+}
+
+void AWWCharacter::RefreshPickaxeWeapons() {
+  for (int32 Index = ActivePickaxes.Num() - 1; Index >= 0; --Index) {
+    if (!IsValid(ActivePickaxes[Index])) {
+      ActivePickaxes.RemoveAtSwap(Index);
+    }
+  }
+
+  if (ActivePickaxeCount <= 0 || !OrbitingPickaxeClass) {
+    for (AWWOrbitingPickaxe* Pickaxe : ActivePickaxes) {
+      if (IsValid(Pickaxe)) {
+        Pickaxe->Destroy();
+      }
+    }
+    ActivePickaxes.Reset();
+    return;
+  }
+
+  while (ActivePickaxes.Num() < ActivePickaxeCount) {
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Owner = this;
+    SpawnParams.Instigator = GetInstigator();
+    SpawnParams.SpawnCollisionHandlingOverride =
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    if (AWWOrbitingPickaxe* NewPickaxe =
+            GetWorld()->SpawnActor<AWWOrbitingPickaxe>(
+                OrbitingPickaxeClass, GetActorLocation(), FRotator::ZeroRotator,
+                SpawnParams)) {
+      ActivePickaxes.Add(NewPickaxe);
+    } else {
+      break;
+    }
+  }
+
+  while (ActivePickaxes.Num() > ActivePickaxeCount) {
+    AWWOrbitingPickaxe* PickaxeToRemove = ActivePickaxes.Pop();
+    if (IsValid(PickaxeToRemove)) {
+      PickaxeToRemove->Destroy();
+    }
+  }
+
+  for (int32 PickaxeIndex = 0; PickaxeIndex < ActivePickaxes.Num(); ++PickaxeIndex) {
+    if (IsValid(ActivePickaxes[PickaxeIndex])) {
+      ActivePickaxes[PickaxeIndex]->Configure(
+          this,
+          PickaxeIndex,
+          ActivePickaxes.Num(),
+          PickaxeOrbitRadius,
+          PickaxeOrbitSpeedDegrees,
+          PickaxeDamage,
+          0.20f);
     }
   }
 }

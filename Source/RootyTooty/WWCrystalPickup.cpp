@@ -6,6 +6,18 @@
 #include "UObject/ConstructorHelpers.h"
 #include "WWCharacter.h"
 
+namespace {
+UStaticMesh *LoadFirstPickupMesh(std::initializer_list<const TCHAR *> Paths) {
+  for (const TCHAR *Path : Paths) {
+    if (UStaticMesh *Mesh = Cast<UStaticMesh>(
+            StaticLoadObject(UStaticMesh::StaticClass(), nullptr, Path))) {
+      return Mesh;
+    }
+  }
+  return nullptr;
+}
+} // namespace
+
 AWWCrystalPickup::AWWCrystalPickup() {
   PrimaryActorTick.bCanEverTick = false;
 
@@ -26,23 +38,41 @@ AWWCrystalPickup::AWWCrystalPickup() {
   MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
   MeshComp->SetupAttachment(RootComponent);
   MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 12.0f));
-  MeshComp->SetRelativeScale3D(FVector(0.25f, 0.25f, 0.6f));
-  MeshComp->SetRelativeRotation(FRotator(0.0f, 45.0f, 0.0f));
+  MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
+  MeshComp->SetRelativeScale3D(FVector(0.35f, 0.35f, 0.35f));
+  MeshComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
 
   SecondaryMeshComp =
       CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SecondaryMeshComp"));
   SecondaryMeshComp->SetupAttachment(RootComponent);
   SecondaryMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  SecondaryMeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, -12.0f));
-  SecondaryMeshComp->SetRelativeScale3D(FVector(0.20f, 0.20f, 0.45f));
-  SecondaryMeshComp->SetRelativeRotation(FRotator(180.0f, 45.0f, 0.0f));
+  SecondaryMeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, -10.0f));
+  SecondaryMeshComp->SetRelativeScale3D(FVector(0.28f, 0.28f, 0.28f));
+  SecondaryMeshComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
 
-  static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(
-      TEXT("/Engine/BasicShapes/Cone.Cone"));
-  if (ConeMesh.Succeeded()) {
-    MeshComp->SetStaticMesh(ConeMesh.Object);
-    SecondaryMeshComp->SetStaticMesh(ConeMesh.Object);
+  UStaticMesh *CoinMesh = LoadFirstPickupMesh({
+      TEXT("/Game/Assets/gold_coin.gold_coin"),
+      TEXT("/Game/Assets/coin.coin"),
+      TEXT("/Game/Assets/FreeWestern/gold_coin.gold_coin"),
+      TEXT("/Game/Assets/FreeWestern/coin.coin"),
+      TEXT("/Game/Assets/FreeWestern/yellow.yellow")});
+
+  if (CoinMesh) {
+    MeshComp->SetStaticMesh(CoinMesh);
+    SecondaryMeshComp->SetStaticMesh(CoinMesh);
+  } else {
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(
+        TEXT("/Engine/BasicShapes/Cone.Cone"));
+    if (ConeMesh.Succeeded()) {
+      MeshComp->SetStaticMesh(ConeMesh.Object);
+      SecondaryMeshComp->SetStaticMesh(ConeMesh.Object);
+      MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 12.0f));
+      MeshComp->SetRelativeScale3D(FVector(0.25f, 0.25f, 0.6f));
+      MeshComp->SetRelativeRotation(FRotator(0.0f, 45.0f, 0.0f));
+      SecondaryMeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, -12.0f));
+      SecondaryMeshComp->SetRelativeScale3D(FVector(0.20f, 0.20f, 0.45f));
+      SecondaryMeshComp->SetRelativeRotation(FRotator(180.0f, 45.0f, 0.0f));
+    }
   }
 
   InitialLifeSpan = 30.0f;
@@ -51,27 +81,27 @@ AWWCrystalPickup::AWWCrystalPickup() {
 void AWWCrystalPickup::BeginPlay() {
   Super::BeginPlay();
 
-  const FLinearColor CrystalColor =
+  const FLinearColor PickupColor =
       (RewardType == ECrystalRewardType::SkillPoint)
           ? FLinearColor(1.0f, 0.85f, 0.20f, 1.0f)
           : FLinearColor(0.10f, 0.95f, 1.0f, 1.0f);
 
   if (UMaterialInstanceDynamic *MID = MeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
-    MID->SetVectorParameterValue(FName("BaseColor"), CrystalColor);
-    MID->SetVectorParameterValue(FName("Color"), CrystalColor);
-    MID->SetVectorParameterValue(FName("Tint"), CrystalColor);
-    MID->SetVectorParameterValue(FName("EmissiveColor"), CrystalColor * 7.0f);
+    MID->SetVectorParameterValue(FName("BaseColor"), PickupColor);
+    MID->SetVectorParameterValue(FName("Color"), PickupColor);
+    MID->SetVectorParameterValue(FName("Tint"), PickupColor);
+    MID->SetVectorParameterValue(FName("EmissiveColor"), PickupColor * 5.0f);
   }
 
   if (SecondaryMeshComp && SecondaryMeshComp->GetStaticMesh()) {
     if (UMaterialInstanceDynamic *SecondaryMID =
             SecondaryMeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
-      const FLinearColor SecondaryColor = CrystalColor * 0.85f;
+      const FLinearColor SecondaryColor = PickupColor * 0.85f;
       SecondaryMID->SetVectorParameterValue(FName("BaseColor"), SecondaryColor);
       SecondaryMID->SetVectorParameterValue(FName("Color"), SecondaryColor);
       SecondaryMID->SetVectorParameterValue(FName("Tint"), SecondaryColor);
       SecondaryMID->SetVectorParameterValue(FName("EmissiveColor"),
-                                            SecondaryColor * 6.0f);
+                                            SecondaryColor * 4.5f);
     }
   }
 }

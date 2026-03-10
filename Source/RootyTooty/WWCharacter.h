@@ -10,6 +10,7 @@ class UCameraComponent;
 class UAnimMontage;
 class UAnimationAsset;
 class UStaticMeshComponent;
+class AWWOrbitingPickaxe;
 
 UENUM()
 enum class ESkillUpgrade : uint8 {
@@ -18,7 +19,11 @@ enum class ESkillUpgrade : uint8 {
   FireRate,
   AttackRange,
   SkillPointBonus,
-  CriticalChance
+  CriticalChance,
+  BulletDamage,
+  PickaxeUnlock,
+  PickaxeDamage,
+  PickaxeSpeed
 };
 
 UCLASS()
@@ -101,6 +106,12 @@ protected:
   UPROPERTY(BlueprintReadOnly, Category = "Weapon")
   float CriticalHitChance;
 
+  UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+  float BaseShotDamage;
+
+  UPROPERTY(EditAnywhere, Category = "Weapon|Pickaxe")
+  TSubclassOf<AWWOrbitingPickaxe> OrbitingPickaxeClass;
+
   UPROPERTY(EditAnywhere, Category = "Weapon")
   TSubclassOf<class AWWProjectile> ProjectileClass;
 
@@ -159,4 +170,19 @@ private:
   int32 AttackRangeUpgradeLevel;
   int32 SkillPointBonusUpgradeLevel;
   int32 CriticalChanceUpgradeLevel;
+  int32 BulletDamageUpgradeLevel;
+  int32 PickaxeUnlockUpgradeLevel;
+  int32 PickaxeDamageUpgradeLevel;
+  int32 PickaxeSpeedUpgradeLevel;
+
+  int32 ActivePickaxeCount;
+  float PickaxeDamage;
+  float PickaxeOrbitRadius;
+  float PickaxeOrbitSpeedDegrees;
+  bool bAutoPickaxeGranted;
+
+  UPROPERTY(Transient)
+  TArray<AWWOrbitingPickaxe*> ActivePickaxes;
+
+  void RefreshPickaxeWeapons();
 };
