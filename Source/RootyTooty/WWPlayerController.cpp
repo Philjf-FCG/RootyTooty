@@ -18,7 +18,7 @@ USoundBase* LoadFirstSound(std::initializer_list<const TCHAR*> Paths) {
 AWWPlayerController::AWWPlayerController(
     const FObjectInitializer &ObjectInitializer)
     : Super(ObjectInitializer) {
-  bEnableBackgroundMusic = false;
+  bEnableBackgroundMusic = true;
   BackgroundMusicComponent = nullptr;
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] WWPlayerController Initialized"));
 }
