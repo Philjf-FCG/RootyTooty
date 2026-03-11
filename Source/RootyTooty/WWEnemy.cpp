@@ -25,6 +25,16 @@ UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   return nullptr;
 }
 
+USkeletalMesh* LoadFirstSkeletalMesh(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(
+            StaticLoadObject(USkeletalMesh::StaticClass(), nullptr, Path))) {
+      return Mesh;
+    }
+  }
+  return nullptr;
+}
+
 UMaterialInterface* LoadFirstMaterial(std::initializer_list<const TCHAR*> Paths) {
   for (const TCHAR* Path : Paths) {
     if (UMaterialInterface* Mat = Cast<UMaterialInterface>(
@@ -84,6 +94,12 @@ AWWEnemy::AWWEnemy() {
   HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   HatCrownComp->SetCastShadow(true);
 
+  TinyBodyComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TinyBodyComp"));
+  TinyBodyComp->SetupAttachment(RootComponent);
+  TinyBodyComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  TinyBodyComp->SetCastShadow(true);
+  TinyBodyComp->SetHiddenInGame(true);
+
   AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
   // NOTE: Animations must be assigned in Blueprint editor
@@ -101,19 +117,63 @@ void AWWEnemy::BeginPlay() {
   const FLinearColor BanditHat = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
   if (USkeletalMeshComponent* EnemyMesh = GetMesh()) {
-    USkeletalMesh* QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
-        USkeletalMesh::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")));
-    if (!QuinnMesh) {
-      QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
-          USkeletalMesh::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")));
+    bool bUsingTinyBody = false;
+    bool bUsingTinySkeletal = false;
+
+    USkeletalMesh* TinyBanditSkeletal = LoadFirstSkeletalMesh({
+      TEXT("/Game/Assets/SKM_Tiny_Bandit.SKM_Tiny_Bandit"),
+      TEXT("/Game/Assets/Tiny_Bandit_SKM.Tiny_Bandit_SKM"),
+      TEXT("/Game/Assets/Tiny_Bandit_SK.Tiny_Bandit_SK")});
+
+    UStaticMesh* TinyBanditMesh = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/Tiny_Bandit.Tiny_Bandit"),
+      TEXT("/Game/Assets/FreeWestern/Tiny_Bandit.Tiny_Bandit")});
+
+    if (TinyBanditSkeletal) {
+      EnemyMesh->SetSkeletalMesh(TinyBanditSkeletal);
+      EnemyMesh->SetVisibility(true, true);
+      EnemyMesh->SetHiddenInGame(false);
+      if (TinyBodyComp) {
+        TinyBodyComp->SetHiddenInGame(true);
+        TinyBodyComp->SetVisibility(false, true);
+      }
+      bUsingTinySkeletal = true;
     }
 
-    if (QuinnMesh) {
+    if (!bUsingTinySkeletal && TinyBodyComp && TinyBanditMesh) {
+      TinyBodyComp->AttachToComponent(EnemyMesh, FAttachmentTransformRules::KeepRelativeTransform);
+      TinyBodyComp->SetStaticMesh(TinyBanditMesh);
+
+      USkeletalMesh* QuinnForScale = LoadFirstSkeletalMesh({
+        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"),
+        TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")});
+      float TinyScale = 1.0f;
+      if (QuinnForScale) {
+        const float TinyHeight = TinyBanditMesh->GetBounds().BoxExtent.Z * 2.0f;
+        const float QuinnHeight = QuinnForScale->GetBounds().BoxExtent.Z * 2.0f;
+        if (TinyHeight > KINDA_SMALL_NUMBER) {
+          TinyScale = FMath::Clamp(QuinnHeight / TinyHeight, 0.25f, 8.0f);
+        }
+      }
+
+      TinyBodyComp->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
+      TinyBodyComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+      TinyBodyComp->SetRelativeScale3D(FVector(TinyScale, TinyScale, TinyScale));
+      TinyBodyComp->SetHiddenInGame(false);
+      TinyBodyComp->SetVisibility(true, true);
+      EnemyMesh->SetHiddenInGame(true);
+      EnemyMesh->SetVisibility(false, true);
+      bUsingTinyBody = true;
+    }
+
+    USkeletalMesh* QuinnMesh = LoadFirstSkeletalMesh({
+      TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"),
+      TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")});
+
+    if (QuinnMesh && !bUsingTinySkeletal) {
       EnemyMesh->SetSkeletalMesh(QuinnMesh);
-      EnemyMesh->SetVisibility(true);
-      EnemyMesh->SetHiddenInGame(false);
+      EnemyMesh->SetVisibility(!bUsingTinyBody, true);
+      EnemyMesh->SetHiddenInGame(bUsingTinyBody);
       EnemyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
@@ -167,7 +227,7 @@ void AWWEnemy::BeginPlay() {
           BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
         }
       }
-    } else {
+    } else if (!bUsingTinySkeletal) {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Quinn skeletal mesh for enemy"));
     }
 
@@ -202,6 +262,8 @@ void AWWEnemy::BeginPlay() {
     }
 
     UStaticMesh* BanditHatWhole = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/Tiny_Bandit.Tiny_Bandit"),
+      TEXT("/Game/Assets/FreeWestern/Tiny_Bandit.Tiny_Bandit"),
         TEXT("/Game/Assets/tophat.tophat"),
         TEXT("/Game/Assets/FreeWestern/tophat.tophat"),
         TEXT("/Game/Assets/cowboy.cowboy"),
@@ -214,55 +276,62 @@ void AWWEnemy::BeginPlay() {
     }
 
     if (HatBrimComp && HatCrownComp) {
-      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
-      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
-
-      if (BanditHatWhole) {
+      if (bUsingTinyBody || bUsingTinySkeletal) {
         HatBrimComp->SetStaticMesh(nullptr);
+        HatCrownComp->SetStaticMesh(nullptr);
         HatBrimComp->SetVisibility(false, true);
-
-        HatCrownComp->SetStaticMesh(BanditHatWhole);
-        HatCrownComp->SetVisibility(true, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+        HatCrownComp->SetVisibility(false, true);
       } else {
-        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
-        HatBrimComp->SetStaticMesh(Cylinder);
-        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
-        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
-        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
+        HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
+        HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
 
-        HatCrownComp->SetStaticMesh(Cylinder);
-        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
-      }
+        if (BanditHatWhole) {
+          HatBrimComp->SetStaticMesh(nullptr);
+          HatBrimComp->SetVisibility(false, true);
 
-      if (BanditHatWhole) {
-        UMaterialInterface* FabricHatMat = LoadFirstMaterial({
-          TEXT("/Game/HatLooks/Materials/M_EnemyHat_BlackVelvet.M_EnemyHat_BlackVelvet"),
-          TEXT("/Game/HatLooks/Materials/M_1k_velvet_2_basecolor.M_1k_velvet_2_basecolor"),
-          TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
+          HatCrownComp->SetStaticMesh(BanditHatWhole);
+          HatCrownComp->SetVisibility(true, true);
+          HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
+          HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
+          HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+        } else {
+          UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
+          HatBrimComp->SetStaticMesh(Cylinder);
+          HatBrimComp->SetVisibility(Cylinder != nullptr, true);
+          HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
+          HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+          HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
 
-        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
-        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
-          if (FabricHatMat) {
-            HatCrownComp->SetMaterial(MaterialIndex, FabricHatMat);
-          }
+          HatCrownComp->SetStaticMesh(Cylinder);
+          HatCrownComp->SetVisibility(Cylinder != nullptr, true);
+          HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
+          HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
+          HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
+        }
 
-          // Always tint every hat slot so enemy hats stay black.
-          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
-            HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("BodyColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("ClothColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), BanditHat);
+        if (BanditHatWhole) {
+          UMaterialInterface* FabricHatMat = LoadFirstMaterial({
+            TEXT("/Game/HatLooks/Materials/M_EnemyHat_BlackVelvet.M_EnemyHat_BlackVelvet"),
+            TEXT("/Game/HatLooks/Materials/M_1k_velvet_2_basecolor.M_1k_velvet_2_basecolor"),
+            TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
+
+          const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
+          for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
+            if (FabricHatMat) {
+              HatCrownComp->SetMaterial(MaterialIndex, FabricHatMat);
+            }
+
+            // Always tint every hat slot so enemy hats stay black.
+            if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
+              HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("BodyColor"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("ClothColor"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), BanditHat);
+              HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), BanditHat);
+            }
           }
         }
       }

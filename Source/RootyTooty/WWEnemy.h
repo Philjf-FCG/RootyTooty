@@ -66,4 +66,7 @@ private:
 
   UPROPERTY(VisibleAnywhere, Category = "Visual")
   UStaticMeshComponent *HatCrownComp;
+
+  UPROPERTY(VisibleAnywhere, Category = "Visual")
+  UStaticMeshComponent *TinyBodyComp;
 };

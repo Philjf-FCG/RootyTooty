@@ -10,6 +10,7 @@ class UCameraComponent;
 class UAnimMontage;
 class UAnimationAsset;
 class UStaticMeshComponent;
+class UAudioComponent;
 class AWWOrbitingPickaxe;
 
 UENUM()
@@ -137,6 +138,9 @@ protected:
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual")
   UStaticMeshComponent *HatCrownComp;
 
+  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual")
+  UStaticMeshComponent *TinyBodyComp;
+
 private:
   float FireTimer;
   float LastFootstepTime;
@@ -148,10 +152,12 @@ private:
   UAnimationAsset *MoveAnimationAsset;
 
   void Move(const FInputActionValue &Value);
+  void TryStartBackgroundMusic();
   void MoveForward(float Value);
   void MoveRight(float Value);
   void AutoAttack();
   void PlayAttackAnimation();
+  void EndAttackAnimation();
   class AWWEnemy *FindNearestEnemy();
   void OfferNextSkillChoices();
   void ChooseSkillOptionByIndex(int32 OptionIndex);
@@ -183,6 +189,9 @@ private:
   
   UPROPERTY(Transient)
   TArray<AWWOrbitingPickaxe*> ActivePickaxes;
+
+  UPROPERTY(Transient)
+  UAudioComponent* RuntimeBgmComponent;
 
   void RefreshPickaxeWeapons();
 };

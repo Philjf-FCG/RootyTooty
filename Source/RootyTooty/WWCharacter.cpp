@@ -4,6 +4,7 @@
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
+#include "Components/AudioComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -34,6 +35,16 @@ UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   for (const TCHAR* Path : Paths) {
     if (UStaticMesh* Mesh = Cast<UStaticMesh>(
             StaticLoadObject(UStaticMesh::StaticClass(), nullptr, Path))) {
+      return Mesh;
+    }
+  }
+  return nullptr;
+}
+
+USkeletalMesh* LoadFirstSkeletalMesh(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(
+            StaticLoadObject(USkeletalMesh::StaticClass(), nullptr, Path))) {
       return Mesh;
     }
   }
@@ -100,8 +111,9 @@ AWWCharacter::AWWCharacter() {
   PickaxeDamage = 25.0f;
   PickaxeOrbitRadius = 145.0f;
   PickaxeOrbitSpeedDegrees = 220.0f;
-    IdleAnimationAsset = nullptr;
+  IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
+  RuntimeBgmComponent = nullptr;
 
   CurrentHealth = MaxHealth;
 
@@ -147,6 +159,12 @@ AWWCharacter::AWWCharacter() {
   HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   HatCrownComp->SetCastShadow(true);
 
+  TinyBodyComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TinyBodyComp"));
+  TinyBodyComp->SetupAttachment(RootComponent);
+  TinyBodyComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  TinyBodyComp->SetCastShadow(true);
+  TinyBodyComp->SetHiddenInGame(true);
+
   // Rotation to movement
   bUseControllerRotationYaw = false;
   GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -161,6 +179,10 @@ AWWCharacter::AWWCharacter() {
 
 void AWWCharacter::BeginPlay() {
   Super::BeginPlay();
+
+  UE_LOG(LogTemp, Warning, TEXT("[AUDIO] Character BeginPlay reached."));
+
+  TryStartBackgroundMusic();
 
   if (SpringArmComp) {
     // Re-apply every startup in case a Blueprint override re-enabled spring collision.
@@ -196,19 +218,86 @@ void AWWCharacter::BeginPlay() {
   const FLinearColor SheriffBadge = FLinearColor(0.81f, 0.68f, 0.22f, 1.0f);
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
-    USkeletalMesh* MannyMesh = Cast<USkeletalMesh>(StaticLoadObject(
-        USkeletalMesh::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
-    if (!MannyMesh) {
-      MannyMesh = Cast<USkeletalMesh>(StaticLoadObject(
-          USkeletalMesh::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
+    bool bUsingTinyBody = false;
+    bool bUsingTinySkeletal = false;
+
+    // Tiny cowboy skeletal import is currently unstable (invalid helper geometry / skeleton drift),
+    // so force the known-good static tiny body path for the player.
+    USkeletalMesh* TinyCowboySkeletal = nullptr;
+
+    UStaticMesh* TinyCowboyMesh = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/Tiny_Cowboy.Tiny_Cowboy"),
+      TEXT("/Game/Assets/FreeWestern/Tiny_Cowboy.Tiny_Cowboy")});
+
+    if (TinyCowboySkeletal) {
+      bool bSkeletalLooksValid = true;
+      USkeletalMesh* MannyForValidation = LoadFirstSkeletalMesh({
+        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
+        TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
+
+      if (MannyForValidation) {
+        const float TinyHeight = TinyCowboySkeletal->GetBounds().BoxExtent.Z * 2.0f;
+        const float MannyHeight = MannyForValidation->GetBounds().BoxExtent.Z * 2.0f;
+        if (TinyHeight <= KINDA_SMALL_NUMBER || MannyHeight <= KINDA_SMALL_NUMBER) {
+          bSkeletalLooksValid = false;
+        } else {
+          const float HeightRatio = TinyHeight / MannyHeight;
+          // Reject malformed imports (for example giant helper geometry becoming the mesh).
+          bSkeletalLooksValid = HeightRatio > 0.15f && HeightRatio < 3.0f;
+          if (!bSkeletalLooksValid) {
+            UE_LOG(LogTemp, Warning,
+                TEXT("Tiny cowboy skeletal rejected (height ratio %.3f). Falling back to static tiny mesh."),
+                HeightRatio);
+          }
+        }
+      }
+
+      if (bSkeletalLooksValid) {
+        CharacterMesh->SetSkeletalMesh(TinyCowboySkeletal);
+        CharacterMesh->SetVisibility(true, true);
+        CharacterMesh->SetHiddenInGame(false);
+        if (TinyBodyComp) {
+          TinyBodyComp->SetHiddenInGame(true);
+          TinyBodyComp->SetVisibility(false, true);
+        }
+        bUsingTinySkeletal = true;
+      }
     }
 
-    if (MannyMesh) {
+    if (!bUsingTinySkeletal && TinyBodyComp && TinyCowboyMesh) {
+      TinyBodyComp->AttachToComponent(CharacterMesh, FAttachmentTransformRules::KeepRelativeTransform);
+      TinyBodyComp->SetStaticMesh(TinyCowboyMesh);
+
+      USkeletalMesh* MannyForScale = LoadFirstSkeletalMesh({
+        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
+        TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
+      float TinyScale = 1.0f;
+      if (MannyForScale) {
+        const float TinyHeight = TinyCowboyMesh->GetBounds().BoxExtent.Z * 2.0f;
+        const float MannyHeight = MannyForScale->GetBounds().BoxExtent.Z * 2.0f;
+        if (TinyHeight > KINDA_SMALL_NUMBER) {
+          TinyScale = FMath::Clamp(MannyHeight / TinyHeight, 0.25f, 8.0f);
+        }
+      }
+
+      TinyBodyComp->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
+      TinyBodyComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+      TinyBodyComp->SetRelativeScale3D(FVector(TinyScale, TinyScale, TinyScale));
+      TinyBodyComp->SetHiddenInGame(false);
+      TinyBodyComp->SetVisibility(true, true);
+      CharacterMesh->SetHiddenInGame(true);
+      CharacterMesh->SetVisibility(false, true);
+      bUsingTinyBody = true;
+    }
+
+    USkeletalMesh* MannyMesh = LoadFirstSkeletalMesh({
+      TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
+      TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
+
+    if (MannyMesh && !bUsingTinySkeletal) {
       CharacterMesh->SetSkeletalMesh(MannyMesh);
-      CharacterMesh->SetVisibility(true);
-      CharacterMesh->SetHiddenInGame(false);
+      CharacterMesh->SetVisibility(!bUsingTinyBody, true);
+      CharacterMesh->SetHiddenInGame(bUsingTinyBody);
       CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
@@ -262,7 +351,7 @@ void AWWCharacter::BeginPlay() {
           BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
         }
       }
-    } else {
+    } else if (!bUsingTinySkeletal) {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Manny skeletal mesh for player"));
     }
 
@@ -297,6 +386,8 @@ void AWWCharacter::BeginPlay() {
     }
 
     UStaticMesh* SheriffHatWhole = LoadFirstStaticMesh({
+      TEXT("/Game/Assets/Tiny_Cowboy.Tiny_Cowboy"),
+      TEXT("/Game/Assets/FreeWestern/Tiny_Cowboy.Tiny_Cowboy"),
       TEXT("/Game/Assets/cowboy.cowboy"),
       TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
     if (!SheriffHatWhole) {
@@ -304,57 +395,64 @@ void AWWCharacter::BeginPlay() {
     }
 
     if (HatBrimComp && HatCrownComp) {
-      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
-      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
-
-      if (SheriffHatWhole) {
-        // Use imported full hat when available.
+      if (bUsingTinyBody || bUsingTinySkeletal) {
         HatBrimComp->SetStaticMesh(nullptr);
+        HatCrownComp->SetStaticMesh(nullptr);
         HatBrimComp->SetVisibility(false, true);
-
-        HatCrownComp->SetStaticMesh(SheriffHatWhole);
-        HatCrownComp->SetVisibility(true, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+        HatCrownComp->SetVisibility(false, true);
       } else {
-        // Fallback hat made from engine primitives so placement still works.
-        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
-        HatBrimComp->SetStaticMesh(Cylinder);
-        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
-        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
-        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
+        HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
+        HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
 
-        HatCrownComp->SetStaticMesh(Cylinder);
-        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
-      }
+        if (SheriffHatWhole) {
+          // Use imported full hat when available.
+          HatBrimComp->SetStaticMesh(nullptr);
+          HatBrimComp->SetVisibility(false, true);
 
-      if (SheriffHatWhole) {
-        UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
-          TEXT("/Game/HatLooks/Materials/M_PlayerHat_Fabric162_Lilac.M_PlayerHat_Fabric162_Lilac"),
-          TEXT("/Game/HatLooks/Materials/M_fabric_162_basecolor_1k.M_fabric_162_basecolor_1k"),
-          TEXT("/Game/HatLooks/Materials/M_fabric_162.M_fabric_162")});
+          HatCrownComp->SetStaticMesh(SheriffHatWhole);
+          HatCrownComp->SetVisibility(true, true);
+          HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
+          HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
+          HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+        } else {
+          // Fallback hat made from engine primitives so placement still works.
+          UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
+          HatBrimComp->SetStaticMesh(Cylinder);
+          HatBrimComp->SetVisibility(Cylinder != nullptr, true);
+          HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
+          HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+          HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
 
-        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
-        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
-          if (VelvetHatMat) {
-            HatCrownComp->SetMaterial(MaterialIndex, VelvetHatMat);
-          }
+          HatCrownComp->SetStaticMesh(Cylinder);
+          HatCrownComp->SetVisibility(Cylinder != nullptr, true);
+          HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
+          HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
+          HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
+        }
 
-          // Always tint every hat slot so player hats stay red.
-          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
-            HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("BodyColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("ClothColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+        if (SheriffHatWhole) {
+          UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
+            TEXT("/Game/HatLooks/Materials/M_PlayerHat_Fabric162_Lilac.M_PlayerHat_Fabric162_Lilac"),
+            TEXT("/Game/HatLooks/Materials/M_fabric_162_basecolor_1k.M_fabric_162_basecolor_1k"),
+            TEXT("/Game/HatLooks/Materials/M_fabric_162.M_fabric_162")});
+
+          const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
+          for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
+            if (VelvetHatMat) {
+              HatCrownComp->SetMaterial(MaterialIndex, VelvetHatMat);
+            }
+
+            // Always tint every hat slot so player hats stay red.
+            if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
+              HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("BodyColor"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("ClothColor"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), SheriffHat);
+              HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
+            }
           }
         }
       }
@@ -391,6 +489,7 @@ void AWWCharacter::BeginPlay() {
             ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
                 PC->GetLocalPlayer())) {
       if (DefaultMappingContext) {
+        Subsystem->RemoveMappingContext(DefaultMappingContext);
         Subsystem->AddMappingContext(DefaultMappingContext, 0);
         UE_LOG(LogTemp, Warning, TEXT("[DEBUG] IMC Added in BeginPlay"));
       } else {
@@ -402,14 +501,48 @@ void AWWCharacter::BeginPlay() {
 
 }
 
+void AWWCharacter::TryStartBackgroundMusic() {
+  const APlayerController* LocalPC = Cast<APlayerController>(GetController());
+  const bool bShouldPlayMusic = IsLocallyControlled() || (LocalPC && LocalPC->IsLocalController());
+  if (!bShouldPlayMusic) {
+    return;
+  }
+
+  if (RuntimeBgmComponent && RuntimeBgmComponent->IsPlaying()) {
+    return;
+  }
+
+  USoundBase* Bgm = LoadFirstSound({
+      TEXT("/Game/Audio/BGM_Ragtime.BGM_Ragtime"),
+      TEXT("/Game/Audio/back_drop-ragtime-piano-honky-tonk-swipesy-354895.back_drop-ragtime-piano-honky-tonk-swipesy-354895"),
+      TEXT("/Game/Audio/WesternMusic.WesternMusic")});
+
+  if (!Bgm) {
+    UE_LOG(LogTemp, Warning, TEXT("[AUDIO] Character path: BGM asset not found."));
+    return;
+  }
+
+  RuntimeBgmComponent = UGameplayStatics::SpawnSound2D(this, Bgm, 1.0f, 1.0f, 0.0f, nullptr, true, false);
+  if (RuntimeBgmComponent) {
+    RuntimeBgmComponent->bAutoDestroy = false;
+    RuntimeBgmComponent->SetVolumeMultiplier(1.0f);
+    UE_LOG(LogTemp, Warning, TEXT("[AUDIO] Character path started BGM: %s"), *Bgm->GetName());
+  } else {
+    UE_LOG(LogTemp, Error, TEXT("[AUDIO] Character path failed to spawn BGM component."));
+  }
+}
+
 void AWWCharacter::PossessedBy(AController *NewController) {
   Super::PossessedBy(NewController);
+
+  TryStartBackgroundMusic();
 
   if (APlayerController *PC = Cast<APlayerController>(NewController)) {
     if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
             ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
                 PC->GetLocalPlayer())) {
       if (DefaultMappingContext) {
+        Subsystem->RemoveMappingContext(DefaultMappingContext);
         Subsystem->AddMappingContext(DefaultMappingContext, 0);
         UE_LOG(LogTemp, Warning, TEXT("[DEBUG] IMC Added in PossessedBy"));
       }
@@ -422,68 +555,23 @@ void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
   if (SpringArmComp) {
-    // Lock camera distance and angle at runtime so it never springs inward.
     SpringArmComp->TargetArmLength = kLockedCameraArmLength;
     SpringArmComp->SetRelativeRotation(kLockedCameraRotation);
     SpringArmComp->bDoCollisionTest = false;
     SpringArmComp->bEnableCameraLag = false;
-    SpringArmComp->bEnableCameraRotationLag = false;
-    SpringArmComp->bUsePawnControlRotation = false;
-    SpringArmComp->SetUsingAbsoluteRotation(true);
-    SpringArmComp->ProbeSize = 0.0f;
-    SpringArmComp->SocketOffset = FVector::ZeroVector;
-    SpringArmComp->TargetOffset = FVector::ZeroVector;
   }
-
-  if (CameraComp) {
-    CameraComp->bUsePawnControlRotation = false;
-  }
-
-  if (GEngine) {
-    FString HeaderLine;
-    TArray<FString> UpgradeLines;
-    TArray<FLinearColor> UpgradeColors;
-    bool bShowChoices = false;
-    TArray<FString> ChoiceLines;
-    TArray<FLinearColor> ChoiceColors;
-    GetUpgradePanelData(HeaderLine, UpgradeLines, UpgradeColors, bShowChoices,
-                        ChoiceLines, ChoiceColors);
-
-    FString DebugHud = HeaderLine;
-    for (const FString& UpgradeLine : UpgradeLines) {
-      DebugHud += TEXT("\n") + UpgradeLine;
-    }
-
-    if (bShowChoices && ChoiceLines.Num() >= 3) {
-      DebugHud += TEXT("\nChoose Upgrade:");
-      for (const FString& ChoiceLine : ChoiceLines) {
-        DebugHud += TEXT("\n") + ChoiceLine;
-      }
-    }
-
-    // Stable HUD fallback that remains visible during play.
-    GEngine->AddOnScreenDebugMessage(
-        (uint64)((PTRINT)this) + 7,
-        0.0f,
-        FColor::White,
-        DebugHud);
-  }
-
-  // Animation Blueprint handles locomotion automatically based on velocity
-  // Just track movement state for other systems if needed
-  FVector Velocity = GetCharacterMovement()->Velocity;
-  bIsMoving = !Velocity.IsNearlyZero(0.1f);
 
   if (bIsMoving) {
     LastFootstepTime += DeltaTime;
     if (LastFootstepTime >= 0.35f) {
       LastFootstepTime = 0.0f;
-        static USoundBase* FootstepSound = LoadFirstSound({
-          TEXT("/Game/Audio/Footsteps.Footsteps"),
-          TEXT("/Game/Audio/Footsteps_Cue.Footsteps_Cue")});
+      static USoundBase* FootstepSound = LoadFirstSound({
+        TEXT("/Game/Audio/Footsteps.Footsteps"),
+        TEXT("/Game/Audio/Footsteps_Cue.Footsteps_Cue")});
       if (FootstepSound) {
-        float Pitch = FMath::RandRange(0.8f, 1.2f);
-        UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, GetActorLocation() - FVector(0,0,90), 0.5f, Pitch);
+        const float Pitch = FMath::RandRange(0.8f, 1.2f);
+        UGameplayStatics::PlaySoundAtLocation(this, FootstepSound,
+            GetActorLocation() - FVector(0, 0, 90), 0.5f, Pitch);
       }
     }
   } else {
@@ -512,6 +600,22 @@ void AWWCharacter::Tick(float DeltaTime) {
 void AWWCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+  if (!PlayerInputComponent) {
+    UE_LOG(LogTemp, Error, TEXT("[DEBUG] PlayerInputComponent is NULL"));
+    return;
+  }
+
+  if (APlayerController *PC = Cast<APlayerController>(Controller)) {
+    if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
+            ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+                PC->GetLocalPlayer())) {
+      if (DefaultMappingContext) {
+        Subsystem->RemoveMappingContext(DefaultMappingContext);
+        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+      }
+    }
+  }
 
   UE_LOG(LogTemp, Warning,
          TEXT("[DEBUG] SetupPlayerInputComponent Called | Component: %s"),
@@ -599,12 +703,14 @@ void AWWCharacter::PlayAttackAnimation() {
   // Reset attack flag after a short time
   FTimerHandle TimerHandle;
   GetWorld()->GetTimerManager().SetTimer(
-      TimerHandle, 
-      [this]() { bIsAttacking = false; }, 
-      0.3f, 
-      false
-  );
+      TimerHandle,
+      this,
+      &AWWCharacter::EndAttackAnimation,
+      0.3f,
+      false);
 }
+
+void AWWCharacter::EndAttackAnimation() { bIsAttacking = false; }
 
 void AWWCharacter::AutoAttack() {
   AWWEnemy *Target = FindNearestEnemy();
