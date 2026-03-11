@@ -139,6 +139,7 @@ protected:
 
 private:
   float FireTimer;
+  float LastFootstepTime;
   bool bIsMoving;
   bool bIsAttacking;
   bool bUsingMoveAnimation;
@@ -179,10 +180,10 @@ private:
   float PickaxeDamage;
   float PickaxeOrbitRadius;
   float PickaxeOrbitSpeedDegrees;
-  bool bAutoPickaxeGranted;
-
+  
   UPROPERTY(Transient)
   TArray<AWWOrbitingPickaxe*> ActivePickaxes;
 
   void RefreshPickaxeWeapons();
 };
+

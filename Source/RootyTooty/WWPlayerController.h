@@ -11,4 +11,14 @@ class ROOTYTOOTY_API AWWPlayerController : public APlayerController {
 public:
   AWWPlayerController(
       const FObjectInitializer &ObjectInitializer = FObjectInitializer::Get());
+
+protected:
+  virtual void BeginPlay() override;
+
+private:
+  UPROPERTY(EditAnywhere, Category = "Audio")
+  bool bEnableBackgroundMusic;
+
+  UPROPERTY(Transient)
+  class UAudioComponent* BackgroundMusicComponent;
 };

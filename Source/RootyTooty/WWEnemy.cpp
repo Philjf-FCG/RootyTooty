@@ -10,6 +10,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "WWCharacter.h"
 #include "WWCrystalPickup.h"
 
@@ -34,40 +35,14 @@ UMaterialInterface* LoadFirstMaterial(std::initializer_list<const TCHAR*> Paths)
   return nullptr;
 }
 
-FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
-  if (!MeshComp) {
-    return FName(TEXT("head"));
-  }
-
-  const FName Candidates[] = {
-      FName(TEXT("head")),
-      FName(TEXT("Head")),
-      FName(TEXT("headSocket")),
-      FName(TEXT("HeadSocket")),
-      FName(TEXT("neck_01"))};
-
-  for (const FName Candidate : Candidates) {
-    if (MeshComp->DoesSocketExist(Candidate)) {
-      return Candidate;
-    }
-    if (MeshComp->GetBoneIndex(Candidate) != INDEX_NONE) {
-      return Candidate;
+USoundBase* LoadFirstSound(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (USoundBase* Sound = Cast<USoundBase>(
+            StaticLoadObject(USoundBase::StaticClass(), nullptr, Path))) {
+      return Sound;
     }
   }
-
-  return FName(TEXT("head"));
-}
-
-void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
-                    const FRotator& LocalRotation, float BaseLift) {
-  if (!HatComp || !HatComp->GetStaticMesh()) {
-    return;
-  }
-
-  // Keep transforms deterministic relative to head socket.
-  HatComp->SetRelativeScale3D(FVector(UniformScale, UniformScale, UniformScale));
-  HatComp->SetRelativeRotation(LocalRotation);
-  HatComp->SetRelativeLocation(FVector(0.0f, 0.0f, BaseLift));
+  return nullptr;
 }
 
 } // namespace
@@ -83,6 +58,7 @@ AWWEnemy::AWWEnemy() {
   SkillPointsPerCrystal = 1;
   bIsDead = false;
   bIsMoving = false;
+  LastFootstepTime = 0.0f;
   bUsingMoveAnimation = false;
   IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
@@ -104,7 +80,7 @@ AWWEnemy::AWWEnemy() {
   HatBrimComp->SetCastShadow(true);
 
   HatCrownComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatCrownComp"));
-  HatCrownComp->SetupAttachment(GetMesh());
+  HatCrownComp->SetupAttachment(GetMesh(), FName("head"));
   HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   HatCrownComp->SetCastShadow(true);
 
@@ -237,23 +213,34 @@ void AWWEnemy::BeginPlay() {
       UE_LOG(LogTemp, Warning, TEXT("Enemy hat mesh not found. Tried tophat and fallback hats in /Game/Assets/FreeWestern."));
     }
 
-    const FName HatAttachPoint = ResolveHeadAttachPoint(EnemyMesh);
+    if (HatBrimComp && HatCrownComp) {
+      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
+      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
 
-    if (HatCrownComp) {
-      HatCrownComp->SetStaticMesh(BanditHatWhole);
-      HatCrownComp->AttachToComponent(
-          EnemyMesh,
-          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-          HatAttachPoint);
-      HatCrownComp->SetVisibility(BanditHatWhole != nullptr);
       if (BanditHatWhole) {
-        // Pitch keeps brim horizontal; roll flips from upside-down to upright.
-        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 8.0f);
+        HatBrimComp->SetStaticMesh(nullptr);
+        HatBrimComp->SetVisibility(false, true);
+
+        HatCrownComp->SetStaticMesh(BanditHatWhole);
+        HatCrownComp->SetVisibility(true, true);
+        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
+        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
       } else {
-        HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
+        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
+        HatBrimComp->SetStaticMesh(Cylinder);
+        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
+        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
+        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
+
+        HatCrownComp->SetStaticMesh(Cylinder);
+        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
+        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
       }
+
       if (BanditHatWhole) {
         UMaterialInterface* FabricHatMat = LoadFirstMaterial({
           TEXT("/Game/HatLooks/Materials/M_EnemyHat_BlackVelvet.M_EnemyHat_BlackVelvet"),
@@ -281,14 +268,7 @@ void AWWEnemy::BeginPlay() {
       }
     }
 
-    if (HatBrimComp) {
-      HatBrimComp->AttachToComponent(
-          EnemyMesh,
-          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-          HatAttachPoint);
-      HatBrimComp->SetStaticMesh(nullptr);
-      HatBrimComp->SetVisibility(false);
-    }
+
   }
 
   if (GetCharacterMovement()) {
@@ -321,6 +301,21 @@ void AWWEnemy::Tick(float DeltaTime) {
     Direction.Normalize();
     AddMovementInput(Direction, 1.0f);
     bIsMoving = Distance > 50.0f;
+
+    if (bIsMoving) {
+      // Use world-time cadence to avoid mutating per-instance timers during live patch sessions.
+      const float TimeNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+      const float Phase = FMath::Fmod(TimeNow + (GetUniqueID() * 0.017f), 0.4f);
+      if (Phase < DeltaTime) {
+        static USoundBase* FootstepSound = LoadFirstSound({
+          TEXT("/Game/Audio/Footsteps.Footsteps"),
+          TEXT("/Game/Audio/Footsteps_Cue.Footsteps_Cue")});
+        if (FootstepSound) {
+          const float Pitch = FMath::RandRange(0.7f, 1.0f);
+          UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, GetActorLocation() - FVector(0, 0, 90), 0.35f, Pitch);
+        }
+      }
+    }
 
     if (USkeletalMeshComponent *EnemyMesh = GetMesh()) {
       if (bIsMoving && MoveAnimationAsset && !bUsingMoveAnimation) {
@@ -413,3 +408,9 @@ void AWWEnemy::Die() {
   }
   Destroy();
 }
+
+
+
+
+
+

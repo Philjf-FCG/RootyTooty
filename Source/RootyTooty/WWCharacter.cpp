@@ -20,12 +20,16 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WWEnemy.h"
 #include "WWOrbitingPickaxe.h"
 #include "WWProjectile.h"
 
 namespace {
+constexpr float kLockedCameraArmLength = 820.0f;
+const FRotator kLockedCameraRotation(-32.0f, 18.0f, 0.0f);
+
 UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   for (const TCHAR* Path : Paths) {
     if (UStaticMesh* Mesh = Cast<UStaticMesh>(
@@ -46,40 +50,14 @@ UMaterialInterface* LoadFirstMaterial(std::initializer_list<const TCHAR*> Paths)
   return nullptr;
 }
 
-FName ResolveHeadAttachPoint(USkeletalMeshComponent* MeshComp) {
-  if (!MeshComp) {
-    return FName(TEXT("head"));
-  }
-
-  const FName Candidates[] = {
-      FName(TEXT("head")),
-      FName(TEXT("Head")),
-      FName(TEXT("headSocket")),
-      FName(TEXT("HeadSocket")),
-      FName(TEXT("neck_01"))};
-
-  for (const FName Candidate : Candidates) {
-    if (MeshComp->DoesSocketExist(Candidate)) {
-      return Candidate;
-    }
-    if (MeshComp->GetBoneIndex(Candidate) != INDEX_NONE) {
-      return Candidate;
+USoundBase* LoadFirstSound(std::initializer_list<const TCHAR*> Paths) {
+  for (const TCHAR* Path : Paths) {
+    if (USoundBase* Sound = Cast<USoundBase>(
+            StaticLoadObject(USoundBase::StaticClass(), nullptr, Path))) {
+      return Sound;
     }
   }
-
-  return FName(TEXT("head"));
-}
-
-void PlaceHatOnHead(UStaticMeshComponent* HatComp, float UniformScale,
-                    const FRotator& LocalRotation, float BaseLift) {
-  if (!HatComp || !HatComp->GetStaticMesh()) {
-    return;
-  }
-
-  // Keep transforms deterministic relative to head socket.
-  HatComp->SetRelativeScale3D(FVector(UniformScale, UniformScale, UniformScale));
-  HatComp->SetRelativeRotation(LocalRotation);
-  HatComp->SetRelativeLocation(FVector(0.0f, 0.0f, BaseLift));
+  return nullptr;
 }
 
 } // namespace
@@ -101,6 +79,7 @@ AWWCharacter::AWWCharacter() {
   ProjectileClass = AWWProjectile::StaticClass();
   OrbitingPickaxeClass = AWWOrbitingPickaxe::StaticClass();
   FireTimer = 0.0f;
+  LastFootstepTime = 0.0f;
   bIsMoving = false;
   bIsAttacking = false;
   bUsingMoveAnimation = false;
@@ -114,15 +93,14 @@ AWWCharacter::AWWCharacter() {
   SkillPointBonusUpgradeLevel = 0;
   CriticalChanceUpgradeLevel = 0;
   BulletDamageUpgradeLevel = 0;
-  PickaxeUnlockUpgradeLevel = 0;
+  PickaxeUnlockUpgradeLevel = 1;
   PickaxeDamageUpgradeLevel = 0;
   PickaxeSpeedUpgradeLevel = 0;
-  ActivePickaxeCount = 0;
+  ActivePickaxeCount = 2;
   PickaxeDamage = 25.0f;
   PickaxeOrbitRadius = 145.0f;
   PickaxeOrbitSpeedDegrees = 220.0f;
-  bAutoPickaxeGranted = false;
-  IdleAnimationAsset = nullptr;
+    IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
   CurrentHealth = MaxHealth;
@@ -139,9 +117,16 @@ AWWCharacter::AWWCharacter() {
   SpringArmComp =
       CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArmComp"));
   SpringArmComp->SetupAttachment(RootComponent);
-  SpringArmComp->TargetArmLength = 820.0f;
-  SpringArmComp->SetRelativeRotation(FRotator(-32.0f, 18.0f, 0.0f));
-  SpringArmComp->bDoCollisionTest = true;
+  SpringArmComp->TargetArmLength = kLockedCameraArmLength;
+  SpringArmComp->SetRelativeRotation(kLockedCameraRotation);
+  SpringArmComp->bDoCollisionTest = false;
+  SpringArmComp->bEnableCameraLag = false;
+  SpringArmComp->bEnableCameraRotationLag = false;
+  SpringArmComp->bUsePawnControlRotation = false;
+  SpringArmComp->SetUsingAbsoluteRotation(true);
+  SpringArmComp->ProbeSize = 0.0f;
+  SpringArmComp->SocketOffset = FVector::ZeroVector;
+  SpringArmComp->TargetOffset = FVector::ZeroVector;
 
   // Disable rotation inheritance to prevent screen shake when character turns
   SpringArmComp->bInheritPitch = false;
@@ -158,7 +143,7 @@ AWWCharacter::AWWCharacter() {
   HatBrimComp->SetCastShadow(true);
 
   HatCrownComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatCrownComp"));
-  HatCrownComp->SetupAttachment(GetMesh());
+  HatCrownComp->SetupAttachment(GetMesh(), FName("head"));
   HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   HatCrownComp->SetCastShadow(true);
 
@@ -176,6 +161,26 @@ AWWCharacter::AWWCharacter() {
 
 void AWWCharacter::BeginPlay() {
   Super::BeginPlay();
+
+  if (SpringArmComp) {
+    // Re-apply every startup in case a Blueprint override re-enabled spring collision.
+    SpringArmComp->TargetArmLength = kLockedCameraArmLength;
+    SpringArmComp->SetRelativeRotation(kLockedCameraRotation);
+    SpringArmComp->bDoCollisionTest = false;
+    SpringArmComp->bEnableCameraLag = false;
+    SpringArmComp->bEnableCameraRotationLag = false;
+    SpringArmComp->bUsePawnControlRotation = false;
+    SpringArmComp->SetUsingAbsoluteRotation(true);
+    SpringArmComp->ProbeSize = 0.0f;
+    SpringArmComp->SocketOffset = FVector::ZeroVector;
+    SpringArmComp->TargetOffset = FVector::ZeroVector;
+  }
+
+  if (CameraComp) {
+    CameraComp->bUsePawnControlRotation = false;
+    CameraComp->SetRelativeLocation(FVector::ZeroVector);
+    CameraComp->SetRelativeRotation(FRotator::ZeroRotator);
+  }
 
   if (!ProjectileClass) {
     // Keep combat working even if a Blueprint default was cleared.
@@ -298,23 +303,36 @@ void AWWCharacter::BeginPlay() {
       UE_LOG(LogTemp, Warning, TEXT("Player hat mesh not found at /Game/Assets/cowboy or /Game/Assets/FreeWestern/cowboy"));
     }
 
-    const FName HatAttachPoint = ResolveHeadAttachPoint(CharacterMesh);
+    if (HatBrimComp && HatCrownComp) {
+      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
+      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
 
-    if (HatCrownComp) {
-      HatCrownComp->SetStaticMesh(SheriffHatWhole);
-      HatCrownComp->AttachToComponent(
-          CharacterMesh,
-          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-          HatAttachPoint);
-      HatCrownComp->SetVisibility(SheriffHatWhole != nullptr);
       if (SheriffHatWhole) {
-        // Pitch keeps brim horizontal; roll flips from upside-down to upright.
-        PlaceHatOnHead(HatCrownComp, 0.28f, FRotator(90.0f, 0.0f, 180.0f), 8.0f);
+        // Use imported full hat when available.
+        HatBrimComp->SetStaticMesh(nullptr);
+        HatBrimComp->SetVisibility(false, true);
+
+        HatCrownComp->SetStaticMesh(SheriffHatWhole);
+        HatCrownComp->SetVisibility(true, true);
+        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
+        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
       } else {
-        HatCrownComp->SetRelativeLocation(FVector::ZeroVector);
+        // Fallback hat made from engine primitives so placement still works.
+        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
+        HatBrimComp->SetStaticMesh(Cylinder);
+        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
+        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
+        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
+
+        HatCrownComp->SetStaticMesh(Cylinder);
+        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
+        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
         HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
       }
+
       if (SheriffHatWhole) {
         UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
           TEXT("/Game/HatLooks/Materials/M_PlayerHat_Fabric162_Lilac.M_PlayerHat_Fabric162_Lilac"),
@@ -342,14 +360,7 @@ void AWWCharacter::BeginPlay() {
       }
     }
 
-    if (HatBrimComp) {
-      HatBrimComp->AttachToComponent(
-          CharacterMesh,
-          FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-          HatAttachPoint);
-      HatBrimComp->SetStaticMesh(nullptr);
-      HatBrimComp->SetVisibility(false);
-    }
+
   }
 
   if (bShowAnimationDebug && GEngine && GetMesh()) {
@@ -410,6 +421,24 @@ void AWWCharacter::PossessedBy(AController *NewController) {
 void AWWCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
+  if (SpringArmComp) {
+    // Lock camera distance and angle at runtime so it never springs inward.
+    SpringArmComp->TargetArmLength = kLockedCameraArmLength;
+    SpringArmComp->SetRelativeRotation(kLockedCameraRotation);
+    SpringArmComp->bDoCollisionTest = false;
+    SpringArmComp->bEnableCameraLag = false;
+    SpringArmComp->bEnableCameraRotationLag = false;
+    SpringArmComp->bUsePawnControlRotation = false;
+    SpringArmComp->SetUsingAbsoluteRotation(true);
+    SpringArmComp->ProbeSize = 0.0f;
+    SpringArmComp->SocketOffset = FVector::ZeroVector;
+    SpringArmComp->TargetOffset = FVector::ZeroVector;
+  }
+
+  if (CameraComp) {
+    CameraComp->bUsePawnControlRotation = false;
+  }
+
   if (GEngine) {
     FString HeaderLine;
     TArray<FString> UpgradeLines;
@@ -444,6 +473,22 @@ void AWWCharacter::Tick(float DeltaTime) {
   // Just track movement state for other systems if needed
   FVector Velocity = GetCharacterMovement()->Velocity;
   bIsMoving = !Velocity.IsNearlyZero(0.1f);
+
+  if (bIsMoving) {
+    LastFootstepTime += DeltaTime;
+    if (LastFootstepTime >= 0.35f) {
+      LastFootstepTime = 0.0f;
+        static USoundBase* FootstepSound = LoadFirstSound({
+          TEXT("/Game/Audio/Footsteps.Footsteps"),
+          TEXT("/Game/Audio/Footsteps_Cue.Footsteps_Cue")});
+      if (FootstepSound) {
+        float Pitch = FMath::RandRange(0.8f, 1.2f);
+        UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, GetActorLocation() - FVector(0,0,90), 0.5f, Pitch);
+      }
+    }
+  } else {
+    LastFootstepTime = 0.35f;
+  }
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
     if (bIsMoving && MoveAnimationAsset && !bUsingMoveAnimation) {
@@ -567,6 +612,16 @@ void AWWCharacter::AutoAttack() {
     // Play attack animation
     PlayAttackAnimation();
 
+    static USoundBase* FireSound = LoadFirstSound({
+      TEXT("/Game/Audio/SFX_PlayerRevolver.SFX_PlayerRevolver"),
+      TEXT("/Game/Audio/magiaz-revolver_shots-407314.magiaz-revolver_shots-407314"),
+      TEXT("/Game/Audio/Pistol.Pistol"),
+      TEXT("/Game/Audio/Pistol_Cue.Pistol_Cue")});
+    if (FireSound) {
+      float Pitch = FMath::RandRange(0.9f, 1.1f);
+      UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation(), 0.7f, Pitch);
+    }
+
     const bool bIsCriticalHit = FMath::FRand() <= CriticalHitChance;
     const float ShotDamage = bIsCriticalHit ? 99999.0f : BaseShotDamage;
 
@@ -654,23 +709,6 @@ void AWWCharacter::AddSkillPoints(int32 Amount) {
 
   SkillPoints += Amount;
   UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
-
-  if (!bAutoPickaxeGranted && SkillPoints >= 5) {
-    bAutoPickaxeGranted = true;
-    PickaxeUnlockUpgradeLevel = FMath::Max(PickaxeUnlockUpgradeLevel, 1);
-    ActivePickaxeCount = FMath::Max(ActivePickaxeCount, 2);
-    RefreshPickaxeWeapons();
-
-    UE_LOG(LogTemp, Warning,
-           TEXT("Auto-unlocked spinning pickaxes at 5 skill points."));
-    if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(
-          (uint64)((PTRINT)this) + 13,
-          2.0f,
-          FColor(80, 220, 120),
-          TEXT("Spinning Pickaxes Unlocked!"));
-    }
-  }
 }
 
 void AWWCharacter::OfferNextSkillChoices() {
@@ -737,19 +775,6 @@ void AWWCharacter::ChooseSkillOptionByIndex(int32 OptionIndex) {
     return;
   }
 
-  if (SkillPoints < 1) {
-    UE_LOG(LogTemp, Warning, TEXT("Not enough skill points for upgrade purchase."));
-    if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(
-          (uint64)((PTRINT)this) + 12,
-          1.2f,
-          FColor::Red,
-          TEXT("Need 1 Skill Point to buy upgrade"));
-    }
-    return;
-  }
-
-  SkillPoints -= 1;
 
   ApplySkillUpgrade(CurrentSkillChoices[OptionIndex]);
 
@@ -797,7 +822,7 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       break;
     case ESkillUpgrade::SkillPointBonus:
       SkillPointBonusUpgradeLevel++;
-      SkillPoints += 1;
+      AddSkillPoints(1);
       break;
     case ESkillUpgrade::CriticalChance:
       CriticalChanceUpgradeLevel++;
@@ -975,7 +1000,7 @@ void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
 
     for (int32 ChoiceIndex = 0; ChoiceIndex < 3; ++ChoiceIndex) {
       const ESkillUpgrade ChoiceUpgrade = CurrentSkillChoices[ChoiceIndex];
-      ChoiceLines.Add(FString::Printf(TEXT("[%d] %s [%s] (Cost: 1 SP)"), ChoiceIndex + 1,
+      ChoiceLines.Add(FString::Printf(TEXT("[%d] %s [%s] "), ChoiceIndex + 1,
                                       *GetSkillUpgradeLabel(ChoiceUpgrade),
                                       *GetSkillUpgradeRarityLabel(ChoiceUpgrade)));
       ChoiceColors.Add(GetSkillUpgradeRarityColor(ChoiceUpgrade).ReinterpretAsLinear());
@@ -1072,3 +1097,18 @@ void AWWCharacter::ToggleAnimationDebug() {
                                      TEXT("AnimDebug OFF"));
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

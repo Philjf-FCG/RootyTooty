@@ -55,6 +55,7 @@ protected:
 private:
   void Die();
   bool bIsDead;
+  float LastFootstepTime;
   bool bIsMoving;
   bool bUsingMoveAnimation;
   UAnimationAsset *IdleAnimationAsset;

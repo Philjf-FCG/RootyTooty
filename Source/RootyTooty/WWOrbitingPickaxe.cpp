@@ -44,6 +44,18 @@ AWWOrbitingPickaxe::AWWOrbitingPickaxe() {
   MeshComp->SetupAttachment(RootComponent);
   MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   MeshComp->SetCastShadow(false);
+  MeshComp->SetRelativeScale3D(FVector(0.88f, 0.88f, 0.88f));
+
+  OrbitCenter = nullptr;
+  OrbitAngleDegrees = 0.0f;
+  OrbitRadius = 145.0f;
+  OrbitSpeedDegrees = 220.0f;
+  Damage = 25.0f;
+  HitCooldown = 0.25f;
+}
+
+void AWWOrbitingPickaxe::BeginPlay() {
+  Super::BeginPlay();
 
   if (UStaticMesh* PickaxeMesh = LoadFirstMesh({
           TEXT("/Game/Weapons/Pickaxe/stylized_pickaxe_SM.stylized_pickaxe_SM"),
@@ -57,19 +69,7 @@ AWWOrbitingPickaxe::AWWOrbitingPickaxe() {
           TEXT("/Game/Weapons/Pickaxe/pickaxe.pickaxe")})) {
     MeshComp->SetMaterial(0, PickaxeMat);
   }
-
-  MeshComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.22f));
-  MeshComp->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-  OrbitCenter = nullptr;
-  OrbitAngleDegrees = 0.0f;
-  OrbitRadius = 145.0f;
-  OrbitSpeedDegrees = 220.0f;
-  Damage = 25.0f;
-  HitCooldown = 0.25f;
 }
-
-void AWWOrbitingPickaxe::BeginPlay() { Super::BeginPlay(); }
 
 void AWWOrbitingPickaxe::Configure(AActor* InOrbitCenter,
                                    int32 InOrbitIndex,
