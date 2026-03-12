@@ -39,7 +39,7 @@ AWWCrystalPickup::AWWCrystalPickup() {
   CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AWWCrystalPickup::OnOverlap);
   RootComponent = CollisionComp;
 
-  // Flat coin: upright (vertical) disc.
+  // Prefer Faz coin mesh when imported; fallback is an upright coin disc.
   MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
   MeshComp->SetupAttachment(RootComponent);
   MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -53,10 +53,23 @@ AWWCrystalPickup::AWWCrystalPickup() {
   SecondaryMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   SecondaryMeshComp->SetHiddenInGame(true);
 
-  static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
-      TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-  if (CylinderMesh.Succeeded()) {
-    MeshComp->SetStaticMesh(CylinderMesh.Object);
+  UStaticMesh* FazCoinMesh = LoadFirstPickupMesh({
+      TEXT("/Game/FazCoin/Faz-Coin.Faz-Coin"),
+      TEXT("/Game/FazCoin/Faz_Coin.Faz_Coin"),
+      TEXT("/Game/FazCoin/SM_Faz_Coin.SM_Faz_Coin"),
+      TEXT("/Game/FazCoin/SM_FazCoin.SM_FazCoin")});
+  if (FazCoinMesh) {
+    MeshComp->SetStaticMesh(FazCoinMesh);
+    MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 20.0f));
+    MeshComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.22f));
+    MeshComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+    bUsingFazCoinVisual = true;
+  } else {
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
+        TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+    if (CylinderMesh.Succeeded()) {
+      MeshComp->SetStaticMesh(CylinderMesh.Object);
+    }
   }
 
   InitialLifeSpan = 30.0f;
@@ -66,17 +79,18 @@ void AWWCrystalPickup::BeginPlay() {
   Super::BeginPlay();
   SpawnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
-  // Use the project's red plaid material for a bright red crystal.
-  // Fall back to creating a MID on the basic shape material if not found.
-  UMaterialInterface* RedMat = Cast<UMaterialInterface>(StaticLoadObject(
-      UMaterialInterface::StaticClass(), nullptr,
-      TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
-  if (RedMat) {
-    MeshComp->SetMaterial(0, RedMat);
-  } else if (UMaterialInstanceDynamic *MID = MeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
-    const FLinearColor CrystalRed = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
-    MID->SetVectorParameterValue(FName("Color"), CrystalRed);
-    MID->SetVectorParameterValue(FName("BaseColor"), CrystalRed);
+  if (!bUsingFazCoinVisual) {
+    // Fallback visual keeps the plaid-red coin style.
+    UMaterialInterface* RedMat = Cast<UMaterialInterface>(StaticLoadObject(
+        UMaterialInterface::StaticClass(), nullptr,
+        TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+    if (RedMat) {
+      MeshComp->SetMaterial(0, RedMat);
+    } else if (UMaterialInstanceDynamic *MID = MeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
+      const FLinearColor CrystalRed = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
+      MID->SetVectorParameterValue(FName("Color"), CrystalRed);
+      MID->SetVectorParameterValue(FName("BaseColor"), CrystalRed);
+    }
   }
 }
 

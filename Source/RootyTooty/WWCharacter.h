@@ -182,6 +182,8 @@ private:
   float PickaxeDamage;
   float PickaxeOrbitRadius;
   float PickaxeOrbitSpeedDegrees;
+  int32 TotalSkillPointsEarned;
+  int32 BonusPickaxesFromSkillPoints;
   
   UPROPERTY(Transient)
   TArray<AWWOrbitingPickaxe*> ActivePickaxes;
@@ -189,6 +191,7 @@ private:
   UPROPERTY(Transient)
   UAudioComponent* RuntimeBgmComponent;
 
+  void RecalculatePickaxeScalingFromSkillPoints();
   void RefreshPickaxeWeapons();
 };
 

@@ -101,7 +101,9 @@ AWWCharacter::AWWCharacter() {
   PickaxeDamage = 25.0f;
   PickaxeOrbitRadius = 145.0f;
   PickaxeOrbitSpeedDegrees = 220.0f;
-    IdleAnimationAsset = nullptr;
+  TotalSkillPointsEarned = SkillPoints;
+  BonusPickaxesFromSkillPoints = 0;
+  IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
   CurrentHealth = MaxHealth;
@@ -212,6 +214,7 @@ void AWWCharacter::BeginPlay() {
   }
 
   CurrentHealth = MaxHealth;
+  RecalculatePickaxeScalingFromSkillPoints();
   RefreshPickaxeWeapons();
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
@@ -460,10 +463,11 @@ void AWWCharacter::Tick(float DeltaTime) {
         DebugHud);
   }
 
-  // Animation Blueprint handles locomotion automatically based on velocity
-  // Just track movement state for other systems if needed
-  FVector Velocity = GetCharacterMovement()->Velocity;
-  bIsMoving = !Velocity.IsNearlyZero(0.1f);
+  // Drive locomotion with speed thresholds + play-rate scaling to avoid
+  // jittery toggles and "ice-skating" looking run cycles.
+  const FVector Velocity = GetCharacterMovement()->Velocity;
+  const float Speed2D = Velocity.Size2D();
+  bIsMoving = Speed2D > 35.0f;
 
   if (bIsMoving) {
     LastFootstepTime += DeltaTime;
@@ -490,6 +494,15 @@ void AWWCharacter::Tick(float DeltaTime) {
       CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
       CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
       bUsingMoveAnimation = false;
+    }
+
+    if (UAnimSingleNodeInstance* SingleNode = CharacterMesh->GetSingleNodeInstance()) {
+      if (bUsingMoveAnimation) {
+        const float SpeedAlpha = FMath::Clamp(Speed2D / FMath::Max(MoveSpeed, 1.0f), 0.0f, 1.5f);
+        SingleNode->SetPlayRate(FMath::Lerp(0.85f, 1.35f, SpeedAlpha));
+      } else {
+        SingleNode->SetPlayRate(1.0f);
+      }
     }
   }
 
@@ -699,6 +712,9 @@ void AWWCharacter::AddSkillPoints(int32 Amount) {
   }
 
   SkillPoints += Amount;
+  TotalSkillPointsEarned += Amount;
+  RecalculatePickaxeScalingFromSkillPoints();
+  RefreshPickaxeWeapons();
   UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
 }
 
@@ -825,7 +841,7 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       break;
     case ESkillUpgrade::PickaxeUnlock:
       PickaxeUnlockUpgradeLevel++;
-      ActivePickaxeCount = FMath::Clamp(ActivePickaxeCount + 1, 0, 4);
+      RecalculatePickaxeScalingFromSkillPoints();
       break;
     case ESkillUpgrade::PickaxeDamage:
       PickaxeDamageUpgradeLevel++;
@@ -997,6 +1013,13 @@ void AWWCharacter::GetUpgradePanelData(FString& HeaderLine,
       ChoiceColors.Add(GetSkillUpgradeRarityColor(ChoiceUpgrade).ReinterpretAsLinear());
     }
   }
+}
+
+void AWWCharacter::RecalculatePickaxeScalingFromSkillPoints() {
+  const int32 BasePickaxeCount = 2 + FMath::Max(0, PickaxeUnlockUpgradeLevel - 1);
+  BonusPickaxesFromSkillPoints = FMath::Max(0, TotalSkillPointsEarned / 5);
+  ActivePickaxeCount = FMath::Clamp(BasePickaxeCount + BonusPickaxesFromSkillPoints, 0, 16);
+  PickaxeOrbitRadius = 145.0f * FMath::Pow(1.10f, static_cast<float>(BonusPickaxesFromSkillPoints));
 }
 
 void AWWCharacter::RefreshPickaxeWeapons() {
