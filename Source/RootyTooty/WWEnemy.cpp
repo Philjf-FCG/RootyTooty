@@ -86,6 +86,9 @@ AWWEnemy::AWWEnemy() {
 void AWWEnemy::BeginPlay() {
   Super::BeginPlay();
 
+  // Keep AI capsule and pathing stable; apply size changes on mesh only.
+  SetActorScale3D(FVector(1.0f));
+
   const FLinearColor BanditCoat = FLinearColor(0.11f, 0.08f, 0.07f, 1.0f);
   const FLinearColor BanditDust = FLinearColor(0.28f, 0.22f, 0.16f, 1.0f);
 
@@ -113,6 +116,8 @@ void AWWEnemy::BeginPlay() {
       EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingBobrito) {
+        // Bobrito import uses a much smaller source scale than mannequin rigs.
+        EnemyMesh->SetRelativeScale3D(FVector(3.891f));
         UMaterialInterface* BobritoMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
             TEXT("/Game/ImportedCharacters/Bobrito/M_BobritoImported.M_BobritoImported")));
@@ -123,6 +128,7 @@ void AWWEnemy::BeginPlay() {
           }
         }
       } else {
+        EnemyMesh->SetRelativeScale3D(FVector(1.0f));
         UMaterialInterface *QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
             TEXT("/Game/Characters/Mannequins/Materials/Quinn/MI_Quinn_01.MI_Quinn_01")));

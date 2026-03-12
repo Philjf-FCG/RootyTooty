@@ -149,21 +149,14 @@ AWWCharacter::AWWCharacter() {
     GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
   }
 
-  // Pre-scale for the Western character so UE uses the correct (small) capsule when
-  // placing the character at the PlayerStart.  Without this, the capsule starts at
-  // full size, gets scaled down in BeginPlay while already on the floor, and the
-  // centre stays at the same world Z -- leaving the character floating.
-  {
-    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WesternFinder(
-        TEXT("/Game/ImportedCharacters/Western/SK_WesternPlayer.SK_WesternPlayer"));
-    if (WesternFinder.Succeeded()) {
-      SetActorScale3D(FVector(0.257f));
-    }
-  }
 }
 
 void AWWCharacter::BeginPlay() {
   Super::BeginPlay();
+
+  // Keep capsule physics and navigation stable.
+  // Scale the visual mesh instead of scaling the whole actor.
+  SetActorScale3D(FVector(1.0f));
 
   if (SpringArmComp) {
     // Re-apply every startup in case a Blueprint override re-enabled spring collision.
@@ -220,9 +213,10 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingWestern) {
-        // Scale already applied in the constructor -- UE spawned the actor with the
-        // correct small capsule so no runtime Z correction is needed here.
-        SetActorScale3D(FVector(0.257f)); // no-op if constructor already set it; safe to call again
+        // Imported Western mesh is large; scale the mesh only so capsule/floor
+        // interactions remain at mannequin defaults.
+        CharacterMesh->SetRelativeScale3D(FVector(0.257f));
+        CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -23.13f));
 
         UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
@@ -234,6 +228,8 @@ void AWWCharacter::BeginPlay() {
           }
         }
       } else {
+        CharacterMesh->SetRelativeScale3D(FVector(1.0f));
+        CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
         UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
             TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));

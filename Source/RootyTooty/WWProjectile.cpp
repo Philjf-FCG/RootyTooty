@@ -14,14 +14,14 @@ AWWProjectile::AWWProjectile() {
   PrimaryActorTick.bCanEverTick = true;
 
   CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComp"));
-  CollisionComp->InitSphereRadius(15.0f);
+  CollisionComp->InitSphereRadius(24.0f);
   CollisionComp->BodyInstance.SetCollisionProfileName("Projectile");
   CollisionComp->OnComponentHit.AddDynamic(this, &AWWProjectile::OnHit);
   CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AWWProjectile::OnOverlap);
   CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
   CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
   CollisionComp->SetCollisionResponseToAllChannels(ECR_Ignore);
-  CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+  CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
   CollisionComp->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
   CollisionComp->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
   CollisionComp->SetGenerateOverlapEvents(true);
@@ -72,10 +72,6 @@ AWWProjectile::AWWProjectile() {
 
 void AWWProjectile::BeginPlay() {
   Super::BeginPlay();
-
-  if (CollisionComp) {
-    CollisionComp->SetSphereRadius(5.0f, true);
-  }
 
   SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
 
