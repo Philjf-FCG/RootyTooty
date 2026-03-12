@@ -74,16 +74,6 @@ AWWEnemy::AWWEnemy() {
     GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
   }
 
-  HatBrimComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatBrimComp"));
-  HatBrimComp->SetupAttachment(GetMesh());
-  HatBrimComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  HatBrimComp->SetCastShadow(true);
-
-  HatCrownComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatCrownComp"));
-  HatCrownComp->SetupAttachment(GetMesh(), FName("head"));
-  HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  HatCrownComp->SetCastShadow(true);
-
   AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
   // NOTE: Animations must be assigned in Blueprint editor
@@ -98,82 +88,104 @@ void AWWEnemy::BeginPlay() {
 
   const FLinearColor BanditCoat = FLinearColor(0.11f, 0.08f, 0.07f, 1.0f);
   const FLinearColor BanditDust = FLinearColor(0.28f, 0.22f, 0.16f, 1.0f);
-  const FLinearColor BanditHat = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
   if (USkeletalMeshComponent* EnemyMesh = GetMesh()) {
-    USkeletalMesh* QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
+    USkeletalMesh* EnemyCharMesh = Cast<USkeletalMesh>(StaticLoadObject(
         USkeletalMesh::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")));
-    if (!QuinnMesh) {
-      QuinnMesh = Cast<USkeletalMesh>(StaticLoadObject(
+        TEXT("/Game/ImportedCharacters/Bobrito/SK_BobritoEnemy.SK_BobritoEnemy")));
+    const bool bUsingBobrito = EnemyCharMesh != nullptr;
+    if (!EnemyCharMesh) {
+      EnemyCharMesh = Cast<USkeletalMesh>(StaticLoadObject(
+          USkeletalMesh::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")));
+    }
+    if (!EnemyCharMesh) {
+      EnemyCharMesh = Cast<USkeletalMesh>(StaticLoadObject(
           USkeletalMesh::StaticClass(), nullptr,
           TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")));
     }
 
-    if (QuinnMesh) {
-      EnemyMesh->SetSkeletalMesh(QuinnMesh);
+    if (EnemyCharMesh) {
+      EnemyMesh->SetSkeletalMesh(EnemyCharMesh);
       EnemyMesh->SetVisibility(true);
       EnemyMesh->SetHiddenInGame(false);
       EnemyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
-      UMaterialInterface *QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/Characters/Mannequins/Materials/Quinn/MI_Quinn_01.MI_Quinn_01")));
-      if (!QuinnMat01) {
-        QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
+      if (bUsingBobrito) {
+        UMaterialInterface* BobritoMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
-            TEXT("/Game/Mannequins/Materials/Quinn/MI_Quinn_01.MI_Quinn_01")));
-      }
-
-      UMaterialInterface *QuinnMat02 = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/Characters/Mannequins/Materials/Quinn/MI_Quinn_02.MI_Quinn_02")));
-      if (!QuinnMat02) {
-        QuinnMat02 = Cast<UMaterialInterface>(StaticLoadObject(
+            TEXT("/Game/ImportedCharacters/Bobrito/M_BobritoImported.M_BobritoImported")));
+        if (BobritoMat) {
+          const int32 MatCount = EnemyMesh->GetNumMaterials();
+          for (int32 i = 0; i < MatCount; ++i) {
+            EnemyMesh->SetMaterial(i, BobritoMat);
+          }
+        }
+      } else {
+        UMaterialInterface *QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
-            TEXT("/Game/Mannequins/Materials/Quinn/MI_Quinn_02.MI_Quinn_02")));
-      }
+            TEXT("/Game/Characters/Mannequins/Materials/Quinn/MI_Quinn_01.MI_Quinn_01")));
+        if (!QuinnMat01) {
+          QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
+              UMaterialInterface::StaticClass(), nullptr,
+              TEXT("/Game/Mannequins/Materials/Quinn/MI_Quinn_01.MI_Quinn_01")));
+        }
 
-      UMaterialInterface *LeatherMat = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/CharacterLooks/Materials/M_brown_leather.M_brown_leather")));
-      UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+        UMaterialInterface *QuinnMat02 = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/Characters/Mannequins/Materials/Quinn/MI_Quinn_02.MI_Quinn_02")));
+        if (!QuinnMat02) {
+          QuinnMat02 = Cast<UMaterialInterface>(StaticLoadObject(
+              UMaterialInterface::StaticClass(), nullptr,
+              TEXT("/Game/Mannequins/Materials/Quinn/MI_Quinn_02.MI_Quinn_02")));
+        }
 
-      UMaterialInterface *PrimaryEnemyMat = LeatherMat ? LeatherMat : QuinnMat01;
-      UMaterialInterface *SecondaryEnemyMat = PlaidMat ? PlaidMat : QuinnMat02;
+        UMaterialInterface *LeatherMat = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/CharacterLooks/Materials/M_brown_leather.M_brown_leather")));
+        UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
 
-      if (PrimaryEnemyMat) {
-        EnemyMesh->SetMaterial(0, PrimaryEnemyMat);
-      }
-      if (SecondaryEnemyMat) {
-        EnemyMesh->SetMaterial(1, SecondaryEnemyMat);
-      }
+        UMaterialInterface *PrimaryEnemyMat = LeatherMat ? LeatherMat : QuinnMat01;
+        UMaterialInterface *SecondaryEnemyMat = PlaidMat ? PlaidMat : QuinnMat02;
 
-      const int32 MaterialCount = EnemyMesh->GetNumMaterials();
-      for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
-        if (UMaterialInstanceDynamic *BodyMat = EnemyMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
-          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? BanditCoat : BanditDust;
-          BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("BodyColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("ClothColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("PrimaryColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("SecondaryColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("AlbedoTint"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
+        if (PrimaryEnemyMat) {
+          EnemyMesh->SetMaterial(0, PrimaryEnemyMat);
+        }
+        if (SecondaryEnemyMat) {
+          EnemyMesh->SetMaterial(1, SecondaryEnemyMat);
+        }
+
+        const int32 MaterialCount = EnemyMesh->GetNumMaterials();
+        for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
+          if (UMaterialInstanceDynamic *BodyMat = EnemyMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
+            const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? BanditCoat : BanditDust;
+            BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("BodyColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("ClothColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("PrimaryColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("SecondaryColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("AlbedoTint"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
+          }
         }
       }
     } else {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load Quinn skeletal mesh for enemy"));
+      UE_LOG(LogTemp, Error, TEXT("Failed to load enemy skeletal mesh"));
     }
 
     IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+        TEXT("/Game/RTG_Bobrito_MM_Idle.RTG_Bobrito_MM_Idle")));
+    if (!IdleAnimationAsset) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+    }
     if (!IdleAnimationAsset) {
       IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
@@ -182,7 +194,12 @@ void AWWEnemy::BeginPlay() {
 
     MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+        TEXT("/Game/RTG_Bobrito_MF_Unarmed_Jog_Fwd.RTG_Bobrito_MF_Unarmed_Jog_Fwd")));
+    if (!MoveAnimationAsset) {
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+    }
     if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
@@ -200,74 +217,6 @@ void AWWEnemy::BeginPlay() {
     if (!MoveAnimationAsset) {
       UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for enemy"));
     }
-
-    UStaticMesh* BanditHatWhole = LoadFirstStaticMesh({
-        TEXT("/Game/Assets/tophat.tophat"),
-        TEXT("/Game/Assets/FreeWestern/tophat.tophat"),
-        TEXT("/Game/Assets/cowboy.cowboy"),
-        TEXT("/Game/Assets/FreeWestern/bertish.bertish"),
-        TEXT("/Game/Assets/FreeWestern/berie.berie"),
-        TEXT("/Game/Assets/FreeWestern/bonnet.bonnet"),
-        TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
-    if (!BanditHatWhole) {
-      UE_LOG(LogTemp, Warning, TEXT("Enemy hat mesh not found. Tried tophat and fallback hats in /Game/Assets/FreeWestern."));
-    }
-
-    if (HatBrimComp && HatCrownComp) {
-      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
-      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
-
-      if (BanditHatWhole) {
-        HatBrimComp->SetStaticMesh(nullptr);
-        HatBrimComp->SetVisibility(false, true);
-
-        HatCrownComp->SetStaticMesh(BanditHatWhole);
-        HatCrownComp->SetVisibility(true, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
-      } else {
-        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
-        HatBrimComp->SetStaticMesh(Cylinder);
-        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
-        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
-        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
-
-        HatCrownComp->SetStaticMesh(Cylinder);
-        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
-      }
-
-      if (BanditHatWhole) {
-        UMaterialInterface* FabricHatMat = LoadFirstMaterial({
-          TEXT("/Game/HatLooks/Materials/M_EnemyHat_BlackVelvet.M_EnemyHat_BlackVelvet"),
-          TEXT("/Game/HatLooks/Materials/M_1k_velvet_2_basecolor.M_1k_velvet_2_basecolor"),
-          TEXT("/Game/HatLooks/Materials/M_velvet_2.M_velvet_2")});
-
-        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
-        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
-          if (FabricHatMat) {
-            HatCrownComp->SetMaterial(MaterialIndex, FabricHatMat);
-          }
-
-          // Always tint every hat slot so enemy hats stay black.
-          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
-            HatTopMat->SetVectorParameterValue(FName("Color"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("BaseColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("Tint"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("BodyColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("ClothColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), BanditHat);
-            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), BanditHat);
-          }
-        }
-      }
-    }
-
 
   }
 

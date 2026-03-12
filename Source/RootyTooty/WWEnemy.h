@@ -61,9 +61,4 @@ private:
   UAnimationAsset *IdleAnimationAsset;
   UAnimationAsset *MoveAnimationAsset;
 
-  UPROPERTY(VisibleAnywhere, Category = "Visual")
-  UStaticMeshComponent *HatBrimComp;
-
-  UPROPERTY(VisibleAnywhere, Category = "Visual")
-  UStaticMeshComponent *HatCrownComp;
 };

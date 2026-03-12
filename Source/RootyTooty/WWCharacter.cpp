@@ -196,79 +196,103 @@ void AWWCharacter::BeginPlay() {
   const FLinearColor SheriffBadge = FLinearColor(0.81f, 0.68f, 0.22f, 1.0f);
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
-    USkeletalMesh* MannyMesh = Cast<USkeletalMesh>(StaticLoadObject(
+    USkeletalMesh* CharMesh = Cast<USkeletalMesh>(StaticLoadObject(
         USkeletalMesh::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
-    if (!MannyMesh) {
-      MannyMesh = Cast<USkeletalMesh>(StaticLoadObject(
+        TEXT("/Game/ImportedCharacters/Western/SK_WesternPlayer.SK_WesternPlayer")));
+    const bool bUsingWestern = CharMesh != nullptr;
+    if (!CharMesh) {
+      CharMesh = Cast<USkeletalMesh>(StaticLoadObject(
+          USkeletalMesh::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
+    }
+    if (!CharMesh) {
+      CharMesh = Cast<USkeletalMesh>(StaticLoadObject(
           USkeletalMesh::StaticClass(), nullptr,
           TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
     }
 
-    if (MannyMesh) {
-      CharacterMesh->SetSkeletalMesh(MannyMesh);
+    if (CharMesh) {
+      CharacterMesh->SetSkeletalMesh(CharMesh);
       CharacterMesh->SetVisibility(true);
       CharacterMesh->SetHiddenInGame(false);
       CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
+      if (bUsingWestern) {
+        SetActorScale3D(FVector(0.257f));
+        UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/ImportedCharacters/Western/Material_001.Material_001")));
+        if (WesternMat) {
+          const int32 MatCount = CharacterMesh->GetNumMaterials();
+          for (int32 i = 0; i < MatCount; ++i) {
+            CharacterMesh->SetMaterial(i, WesternMat);
+          }
+        }
+      } else {
         UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));
-      if (!MannyMat01) {
-        MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
-            TEXT("/Game/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));
-      }
+            TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));
+        if (!MannyMat01) {
+          MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
+              UMaterialInterface::StaticClass(), nullptr,
+              TEXT("/Game/Mannequins/Materials/Manny/MI_Manny_01_New.MI_Manny_01_New")));
+        }
 
-      UMaterialInterface *MannyMat02 = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_02_New.MI_Manny_02_New")));
-      if (!MannyMat02) {
-        MannyMat02 = Cast<UMaterialInterface>(StaticLoadObject(
+        UMaterialInterface *MannyMat02 = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
-            TEXT("/Game/Mannequins/Materials/Manny/MI_Manny_02_New.MI_Manny_02_New")));
-      }
+            TEXT("/Game/Characters/Mannequins/Materials/Manny/MI_Manny_02_New.MI_Manny_02_New")));
+        if (!MannyMat02) {
+          MannyMat02 = Cast<UMaterialInterface>(StaticLoadObject(
+              UMaterialInterface::StaticClass(), nullptr,
+              TEXT("/Game/Mannequins/Materials/Manny/MI_Manny_02_New.MI_Manny_02_New")));
+        }
 
-      UMaterialInterface *JeansMat = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/CharacterLooks/Materials/M_jeans_fabric.M_jeans_fabric")));
-      UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
-          UMaterialInterface::StaticClass(), nullptr,
-          TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+        UMaterialInterface *JeansMat = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/CharacterLooks/Materials/M_jeans_fabric.M_jeans_fabric")));
+        UMaterialInterface *PlaidMat = Cast<UMaterialInterface>(StaticLoadObject(
+            UMaterialInterface::StaticClass(), nullptr,
+            TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
 
-      UMaterialInterface *PrimaryPlayerMat = JeansMat ? JeansMat : MannyMat01;
-      UMaterialInterface *SecondaryPlayerMat = PlaidMat ? PlaidMat : MannyMat02;
+        UMaterialInterface *PrimaryPlayerMat = JeansMat ? JeansMat : MannyMat01;
+        UMaterialInterface *SecondaryPlayerMat = PlaidMat ? PlaidMat : MannyMat02;
 
-      if (PrimaryPlayerMat) {
-        CharacterMesh->SetMaterial(0, PrimaryPlayerMat);
-      }
-      if (SecondaryPlayerMat) {
-        CharacterMesh->SetMaterial(1, SecondaryPlayerMat);
-      }
+        if (PrimaryPlayerMat) {
+          CharacterMesh->SetMaterial(0, PrimaryPlayerMat);
+        }
+        if (SecondaryPlayerMat) {
+          CharacterMesh->SetMaterial(1, SecondaryPlayerMat);
+        }
 
-      const int32 MaterialCount = CharacterMesh->GetNumMaterials();
-      for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
-        if (UMaterialInstanceDynamic *BodyMat = CharacterMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
-          const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? SheriffCoat : SheriffLeather;
-          BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("BodyColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("ClothColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("PrimaryColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("SecondaryColor"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("AlbedoTint"), SlotColor);
-          BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
+        const int32 MaterialCount = CharacterMesh->GetNumMaterials();
+        for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex) {
+          if (UMaterialInstanceDynamic *BodyMat = CharacterMesh->CreateDynamicMaterialInstance(MaterialIndex)) {
+            const FLinearColor SlotColor = (MaterialIndex % 2 == 0) ? SheriffCoat : SheriffLeather;
+            BodyMat->SetVectorParameterValue(FName("BaseColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("Color"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("Tint"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("BodyColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("ClothColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("PrimaryColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("SecondaryColor"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("AlbedoTint"), SlotColor);
+            BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
+          }
         }
       }
     } else {
-      UE_LOG(LogTemp, Error, TEXT("Failed to load Manny skeletal mesh for player"));
+      UE_LOG(LogTemp, Error, TEXT("Failed to load player skeletal mesh"));
     }
 
     IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+        TEXT("/Game/RTG_Western_MM_Idle.RTG_Western_MM_Idle")));
+    if (!IdleAnimationAsset) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+    }
     if (!IdleAnimationAsset) {
       IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
@@ -277,7 +301,12 @@ void AWWCharacter::BeginPlay() {
 
     MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+        TEXT("/Game/RTG_Western_MF_Unarmed_Jog_Fwd.RTG_Western_MF_Unarmed_Jog_Fwd")));
+    if (!MoveAnimationAsset) {
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+    }
     if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
