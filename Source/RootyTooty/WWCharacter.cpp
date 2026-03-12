@@ -22,6 +22,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Components/CapsuleComponent.h"
 #include "WWEnemy.h"
 #include "WWOrbitingPickaxe.h"
 #include "WWProjectile.h"
@@ -207,7 +208,16 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingWestern) {
+        // Capture current world-space capsule half-height BEFORE scaling so we can
+        // compensate the actor Z afterwards (scaling shrinks the capsule but leaves
+        // the capsule centre unchanged, which would leave the character floating).
+        const float PreScaleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         SetActorScale3D(FVector(0.257f));
+        const float PostScaleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        // Move the actor down by the deficit so the capsule bottom stays at floor level.
+        const FVector ScaleOffset(0.f, 0.f, PostScaleHalfHeight - PreScaleHalfHeight);
+        SetActorLocation(GetActorLocation() + ScaleOffset, false, nullptr, ETeleportType::TeleportPhysics);
+
         UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
             TEXT("/Game/ImportedCharacters/Western/Material_001.Material_001")));
