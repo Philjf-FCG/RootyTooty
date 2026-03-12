@@ -42,8 +42,14 @@ private:
   UPROPERTY(VisibleAnywhere, Category = "Pickup")
   UStaticMeshComponent *SecondaryMeshComp;
 
+  virtual void Tick(float DeltaTime) override;
+
   UFUNCTION()
   void OnOverlap(UPrimitiveComponent *OverlappedComp, AActor *OtherActor,
                  UPrimitiveComponent *OtherComp, int32 OtherBodyIndex,
                  bool bFromSweep, const FHitResult &SweepResult);
+
+  void TryPickup(class AWWCharacter *Player);
+
+  bool bPickedUp = false;
 };

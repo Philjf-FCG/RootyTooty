@@ -133,12 +133,6 @@ protected:
   UCameraComponent *CameraComp;
 
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual")
-  UStaticMeshComponent *HatBrimComp;
-
-  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual")
-  UStaticMeshComponent *HatCrownComp;
-
-  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual")
   UStaticMeshComponent *TinyBodyComp;
 
 private:

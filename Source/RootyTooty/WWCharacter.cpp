@@ -137,16 +137,6 @@ AWWCharacter::AWWCharacter() {
   CameraComp->SetupAttachment(SpringArmComp);
   CameraComp->bUsePawnControlRotation = false;
 
-  HatBrimComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatBrimComp"));
-  HatBrimComp->SetupAttachment(GetMesh());
-  HatBrimComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  HatBrimComp->SetCastShadow(true);
-
-  HatCrownComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HatCrownComp"));
-  HatCrownComp->SetupAttachment(GetMesh(), FName("head"));
-  HatCrownComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  HatCrownComp->SetCastShadow(true);
-
   // Rotation to movement
   bUseControllerRotationYaw = false;
   GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -192,8 +182,6 @@ void AWWCharacter::BeginPlay() {
   RefreshPickaxeWeapons();
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
-  const FLinearColor SheriffHat = FLinearColor(0.73f, 0.59f, 0.83f, 1.0f);
-  const FLinearColor SheriffBadge = FLinearColor(0.81f, 0.68f, 0.22f, 1.0f);
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
     USkeletalMesh* CharMesh = Cast<USkeletalMesh>(StaticLoadObject(
@@ -324,71 +312,6 @@ void AWWCharacter::BeginPlay() {
     if (!MoveAnimationAsset) {
       UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for player"));
     }
-
-    UStaticMesh* SheriffHatWhole = LoadFirstStaticMesh({
-      TEXT("/Game/Assets/cowboy.cowboy"),
-      TEXT("/Game/Assets/FreeWestern/cowboy.cowboy")});
-    if (!SheriffHatWhole) {
-      UE_LOG(LogTemp, Warning, TEXT("Player hat mesh not found at /Game/Assets/cowboy or /Game/Assets/FreeWestern/cowboy"));
-    }
-
-    if (HatBrimComp && HatCrownComp) {
-      HatBrimComp->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("head"));
-      HatCrownComp->AttachToComponent(HatBrimComp, FAttachmentTransformRules::KeepRelativeTransform);
-
-      if (SheriffHatWhole) {
-        // Use imported full hat when available.
-        HatBrimComp->SetStaticMesh(nullptr);
-        HatBrimComp->SetVisibility(false, true);
-
-        HatCrownComp->SetStaticMesh(SheriffHatWhole);
-        HatCrownComp->SetVisibility(true, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.32f, 0.32f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator(0.0f, 90.0f, -90.0f));
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
-      } else {
-        // Fallback hat made from engine primitives so placement still works.
-        UStaticMesh* Cylinder = LoadFirstStaticMesh({TEXT("/Engine/BasicShapes/Cylinder.Cylinder")});
-        HatBrimComp->SetStaticMesh(Cylinder);
-        HatBrimComp->SetVisibility(Cylinder != nullptr, true);
-        HatBrimComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.04f));
-        HatBrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatBrimComp->SetRelativeLocation(FVector(0.0f, 0.0f, 1.0f));
-
-        HatCrownComp->SetStaticMesh(Cylinder);
-        HatCrownComp->SetVisibility(Cylinder != nullptr, true);
-        HatCrownComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.32f));
-        HatCrownComp->SetRelativeRotation(FRotator::ZeroRotator);
-        HatCrownComp->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
-      }
-
-      if (SheriffHatWhole) {
-        UMaterialInterface* VelvetHatMat = LoadFirstMaterial({
-          TEXT("/Game/HatLooks/Materials/M_PlayerHat_Fabric162_Lilac.M_PlayerHat_Fabric162_Lilac"),
-          TEXT("/Game/HatLooks/Materials/M_fabric_162_basecolor_1k.M_fabric_162_basecolor_1k"),
-          TEXT("/Game/HatLooks/Materials/M_fabric_162.M_fabric_162")});
-
-        const int32 HatMaterialCount = FMath::Max(HatCrownComp->GetNumMaterials(), 1);
-        for (int32 MaterialIndex = 0; MaterialIndex < HatMaterialCount; ++MaterialIndex) {
-          if (VelvetHatMat) {
-            HatCrownComp->SetMaterial(MaterialIndex, VelvetHatMat);
-          }
-
-          // Always tint every hat slot so player hats stay red.
-          if (UMaterialInstanceDynamic *HatTopMat = HatCrownComp->CreateDynamicMaterialInstance(MaterialIndex)) {
-            HatTopMat->SetVectorParameterValue(FName("Color"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("BaseColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("Tint"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("BodyColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("ClothColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("PrimaryColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("DiffuseColor"), SheriffHat);
-            HatTopMat->SetVectorParameterValue(FName("SecondaryColor"), SheriffBadge);
-          }
-        }
-      }
-    }
-
 
   }
 
