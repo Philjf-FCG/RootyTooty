@@ -1,6 +1,7 @@
 #include "WWEnemy.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/AnimationAsset.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -70,6 +71,8 @@ AWWEnemy::AWWEnemy() {
   bIsMoving = false;
   LastFootstepTime = 0.0f;
   bUsingMoveAnimation = false;
+  bUseAnimationBlueprintLocomotion = false;
+  bSkipIdleSingleNodeAnimation = false;
   IdleAnimationAsset = nullptr;
   MoveAnimationAsset = nullptr;
 
@@ -118,64 +121,78 @@ void AWWEnemy::BeginPlay() {
 
   if (USkeletalMeshComponent* EnemyMesh = GetMesh()) {
     bool bUsingTinyBody = false;
-    bool bUsingTinySkeletal = false;
+    bool bUsingImportedEnemySkeletal = false;
 
-    USkeletalMesh* TinyBanditSkeletal = LoadFirstSkeletalMesh({
+    USkeletalMesh* ImportedEnemySkeletal = LoadFirstSkeletalMesh({
+      TEXT("/Game/ImportedCharacters/Bobrito/SK_BobritoEnemy.SK_BobritoEnemy"),
+      TEXT("/Game/ImportedCharacters/Bobrito/Offensive_Idle.Offensive_Idle"),
       TEXT("/Game/Assets/SKM_Tiny_Bandit.SKM_Tiny_Bandit"),
       TEXT("/Game/Assets/Tiny_Bandit_SKM.Tiny_Bandit_SKM"),
       TEXT("/Game/Assets/Tiny_Bandit_SK.Tiny_Bandit_SK")});
 
-    UStaticMesh* TinyBanditMesh = LoadFirstStaticMesh({
-      TEXT("/Game/Assets/Tiny_Bandit.Tiny_Bandit"),
-      TEXT("/Game/Assets/FreeWestern/Tiny_Bandit.Tiny_Bandit")});
-
-    if (TinyBanditSkeletal) {
-      EnemyMesh->SetSkeletalMesh(TinyBanditSkeletal);
+    const bool bAllowImportedEnemyRuntime = true;
+    if (ImportedEnemySkeletal && bAllowImportedEnemyRuntime) {
+      EnemyMesh->SetSkeletalMesh(ImportedEnemySkeletal);
       EnemyMesh->SetVisibility(true, true);
       EnemyMesh->SetHiddenInGame(false);
+      EnemyMesh->SetSimulatePhysics(false);
+      EnemyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
+      EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+
+      if (UMaterialInterface* BobritoMat = LoadFirstMaterial({
+              TEXT("/Game/ImportedCharacters/Bobrito/M_BobritoImported.M_BobritoImported")})) {
+        const int32 ImportedMatCount = FMath::Max(EnemyMesh->GetNumMaterials(), 1);
+        for (int32 MaterialIndex = 0; MaterialIndex < ImportedMatCount; ++MaterialIndex) {
+          EnemyMesh->SetMaterial(MaterialIndex, BobritoMat);
+        }
+      }
+
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Enemy mesh selected: %s"), *GetPathNameSafe(ImportedEnemySkeletal));
       if (TinyBodyComp) {
         TinyBodyComp->SetHiddenInGame(true);
         TinyBodyComp->SetVisibility(false, true);
       }
-      bUsingTinySkeletal = true;
-    }
-
-    if (!bUsingTinySkeletal && TinyBodyComp && TinyBanditMesh) {
-      TinyBodyComp->AttachToComponent(EnemyMesh, FAttachmentTransformRules::KeepRelativeTransform);
-      TinyBodyComp->SetStaticMesh(TinyBanditMesh);
-
-      USkeletalMesh* QuinnForScale = LoadFirstSkeletalMesh({
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"),
-        TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")});
-      float TinyScale = 1.0f;
-      if (QuinnForScale) {
-        const float TinyHeight = TinyBanditMesh->GetBounds().BoxExtent.Z * 2.0f;
-        const float QuinnHeight = QuinnForScale->GetBounds().BoxExtent.Z * 2.0f;
-        if (TinyHeight > KINDA_SMALL_NUMBER) {
-          TinyScale = FMath::Clamp(QuinnHeight / TinyHeight, 0.25f, 8.0f);
-        }
+      if (HatBrimComp) {
+        HatBrimComp->SetStaticMesh(nullptr);
+        HatBrimComp->SetHiddenInGame(true);
+        HatBrimComp->SetVisibility(false, true);
       }
+      if (HatCrownComp) {
+        HatCrownComp->SetStaticMesh(nullptr);
+        HatCrownComp->SetHiddenInGame(true);
+        HatCrownComp->SetVisibility(false, true);
+      }
+      bUsingImportedEnemySkeletal = true;
+      bUseAnimationBlueprintLocomotion = false;
+      bSkipIdleSingleNodeAnimation = false;
 
-      TinyBodyComp->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
-      TinyBodyComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-      TinyBodyComp->SetRelativeScale3D(FVector(TinyScale, TinyScale, TinyScale));
-      TinyBodyComp->SetHiddenInGame(false);
-      TinyBodyComp->SetVisibility(true, true);
-      EnemyMesh->SetHiddenInGame(true);
-      EnemyMesh->SetVisibility(false, true);
-      bUsingTinyBody = true;
+      UAnimationAsset* BobritoIdle = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/RTG_Bobrito_MM_Idle.RTG_Bobrito_MM_Idle")));
+      UAnimationAsset* BobritoMove = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/RTG_Bobrito_MF_Unarmed_Jog_Fwd.RTG_Bobrito_MF_Unarmed_Jog_Fwd")));
+      if (BobritoIdle) {
+        IdleAnimationAsset = BobritoIdle;
+      }
+      if (BobritoMove) {
+        MoveAnimationAsset = BobritoMove;
+      }
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Bobrito retarget idle loaded: %s"), IdleAnimationAsset ? TEXT("YES") : TEXT("NO"));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Bobrito retarget move loaded: %s"), MoveAnimationAsset ? TEXT("YES") : TEXT("NO"));
     }
 
     USkeletalMesh* QuinnMesh = LoadFirstSkeletalMesh({
       TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"),
       TEXT("/Game/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple")});
 
-    if (QuinnMesh && !bUsingTinySkeletal) {
+    if (QuinnMesh && !bUsingImportedEnemySkeletal) {
       EnemyMesh->SetSkeletalMesh(QuinnMesh);
       EnemyMesh->SetVisibility(!bUsingTinyBody, true);
       EnemyMesh->SetHiddenInGame(bUsingTinyBody);
       EnemyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Enemy fallback mesh selected: %s"), *GetPathNameSafe(QuinnMesh));
 
       UMaterialInterface *QuinnMat01 = Cast<UMaterialInterface>(StaticLoadObject(
           UMaterialInterface::StaticClass(), nullptr,
@@ -227,38 +244,48 @@ void AWWEnemy::BeginPlay() {
           BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
         }
       }
-    } else if (!bUsingTinySkeletal) {
+    } else if (!bUsingImportedEnemySkeletal) {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Quinn skeletal mesh for enemy"));
     }
 
-    IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+    if (!bUsingImportedEnemySkeletal) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
         TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    if (!IdleAnimationAsset) {
+      if (!IdleAnimationAsset) {
       IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    }
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+      }
 
-    MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
         TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    if (!MoveAnimationAsset) {
+      if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+      }
     }
 
-    if (IdleAnimationAsset) {
-      EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      EnemyMesh->PlayAnimation(IdleAnimationAsset, true);
+    if (bUsingImportedEnemySkeletal) {
+      if (IdleAnimationAsset) {
+        EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+        EnemyMesh->PlayAnimation(IdleAnimationAsset, true);
+      }
       bUsingMoveAnimation = false;
     } else {
-      UE_LOG(LogTemp, Warning, TEXT("Failed to load idle locomotion animation for enemy"));
-    }
+      if (IdleAnimationAsset) {
+        EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+        EnemyMesh->PlayAnimation(IdleAnimationAsset, true);
+        bUsingMoveAnimation = false;
+      } else {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to load idle locomotion animation for enemy"));
+      }
 
-    if (!MoveAnimationAsset) {
-      UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for enemy"));
+      if (!MoveAnimationAsset) {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for enemy"));
+      }
     }
 
     UStaticMesh* BanditHatWhole = LoadFirstStaticMesh({
@@ -276,7 +303,7 @@ void AWWEnemy::BeginPlay() {
     }
 
     if (HatBrimComp && HatCrownComp) {
-      if (bUsingTinyBody || bUsingTinySkeletal) {
+      if (bUsingTinyBody) {
         HatBrimComp->SetStaticMesh(nullptr);
         HatCrownComp->SetStaticMesh(nullptr);
         HatBrimComp->SetVisibility(false, true);
@@ -362,14 +389,32 @@ void AWWEnemy::BeginPlay() {
 void AWWEnemy::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
+  if (bIsDead) {
+    return;
+  }
+
   APawn *PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
   if (PlayerPawn) {
-    FVector Direction = PlayerPawn->GetActorLocation() - GetActorLocation();
+    FVector PlayerLocation = PlayerPawn->GetActorLocation();
+    PlayerLocation.Z = GetActorLocation().Z; // flatten to same Z to avoid vertical targeting
+
+    // Each enemy picks a unique orbit slot around the player so they form a
+    // ring instead of all cramming into the same point.
+    const float OrbitRadius = 90.0f;
+    // Use the unique ID to spread enemies around 360 degrees.
+    const float SlotAngleDeg = FMath::Fmod((float)(GetUniqueID() % 16) * (360.0f / 16.0f), 360.0f);
+    const float SlotAngleRad = FMath::DegreesToRadians(SlotAngleDeg);
+    const FVector OrbitOffset = FVector(FMath::Cos(SlotAngleRad), FMath::Sin(SlotAngleRad), 0.0f) * OrbitRadius;
+    const FVector TargetLocation = PlayerLocation + OrbitOffset;
+
+    FVector Direction = TargetLocation - GetActorLocation();
     Direction.Z = 0.0f;
     float Distance = Direction.Size(); // Calculate distance before normalizing
-    Direction.Normalize();
-    AddMovementInput(Direction, 1.0f);
     bIsMoving = Distance > 50.0f;
+    if (bIsMoving && Distance > KINDA_SMALL_NUMBER) {
+      Direction.Normalize();
+      AddMovementInput(Direction, 1.0f);
+    }
 
     if (bIsMoving) {
       // Use world-time cadence to avoid mutating per-instance timers during live patch sessions.
@@ -387,14 +432,31 @@ void AWWEnemy::Tick(float DeltaTime) {
     }
 
     if (USkeletalMeshComponent *EnemyMesh = GetMesh()) {
-      if (bIsMoving && MoveAnimationAsset && !bUsingMoveAnimation) {
-        EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-        EnemyMesh->PlayAnimation(MoveAnimationAsset, true);
-        bUsingMoveAnimation = true;
-      } else if (!bIsMoving && IdleAnimationAsset && bUsingMoveAnimation) {
-        EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-        EnemyMesh->PlayAnimation(IdleAnimationAsset, true);
+      if (bUseAnimationBlueprintLocomotion) {
+        if (EnemyMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint) {
+          EnemyMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+        }
         bUsingMoveAnimation = false;
+      } else {
+        UAnimationAsset* DesiredAnim = nullptr;
+        if (bIsMoving) {
+          DesiredAnim = MoveAnimationAsset;
+        } else if (!bSkipIdleSingleNodeAnimation) {
+          DesiredAnim = IdleAnimationAsset;
+        }
+
+        if (DesiredAnim) {
+          UAnimSingleNodeInstance* SingleNode = EnemyMesh->GetSingleNodeInstance();
+          UAnimationAsset* CurrentAnim = SingleNode ? SingleNode->GetCurrentAsset() : nullptr;
+          if (EnemyMesh->GetAnimationMode() != EAnimationMode::AnimationSingleNode || CurrentAnim != DesiredAnim) {
+            EnemyMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+            EnemyMesh->PlayAnimation(DesiredAnim, true);
+          }
+          bUsingMoveAnimation = bIsMoving;
+        } else if (bSkipIdleSingleNodeAnimation) {
+          EnemyMesh->Stop();
+          bUsingMoveAnimation = false;
+        }
       }
     }
 
@@ -447,6 +509,15 @@ float AWWEnemy::TakeDamage(float DamageAmount, FDamageEvent const &DamageEvent,
 
 void AWWEnemy::Die() {
   UE_LOG(LogTemp, Display, TEXT("Enemy %s died"), *GetName());
+
+  bIsDead = true;
+
+  if (GetCharacterMovement()) {
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->DisableMovement();
+  }
+  SetActorTickEnabled(false);
+  SetLifeSpan(0.05f);
 
   SetActorEnableCollision(false);
   if (GetCapsuleComponent()) {

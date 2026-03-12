@@ -147,6 +147,8 @@ private:
   bool bIsMoving;
   bool bIsAttacking;
   bool bUsingMoveAnimation;
+  bool bUseAnimationBlueprintLocomotion;
+  bool bSkipIdleSingleNodeAnimation;
   bool bShowAnimationDebug;
   UAnimationAsset *IdleAnimationAsset;
   UAnimationAsset *MoveAnimationAsset;

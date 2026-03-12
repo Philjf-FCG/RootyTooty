@@ -1,7 +1,10 @@
 #include "WWPlayerController.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "InputCoreTypes.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
@@ -29,6 +32,15 @@ AWWPlayerController::AWWPlayerController(
 void AWWPlayerController::BeginPlay() {
   Super::BeginPlay();
 
+  // Ensure PIE/game viewport routes keyboard input to pawn movement.
+  FInputModeGameOnly InputMode;
+  SetInputMode(InputMode);
+  bShowMouseCursor = false;
+  bEnableClickEvents = false;
+  bEnableMouseOverEvents = false;
+  SetIgnoreMoveInput(false);
+  SetIgnoreLookInput(false);
+
   TryStartBackgroundMusic();
 }
 
@@ -42,6 +54,45 @@ void AWWPlayerController::PostInitializeComponents() {
   Super::PostInitializeComponents();
 
   TryStartBackgroundMusic();
+}
+
+void AWWPlayerController::PlayerTick(float DeltaTime) {
+  Super::PlayerTick(DeltaTime);
+
+  if (!IsLocalController() || IsMoveInputIgnored()) {
+    return;
+  }
+
+  APawn* ControlledPawn = GetPawn();
+  if (!ControlledPawn) {
+    return;
+  }
+
+  if (ACharacter* ControlledCharacter = Cast<ACharacter>(ControlledPawn)) {
+    if (UCharacterMovementComponent* MoveComp = ControlledCharacter->GetCharacterMovement()) {
+      if (MoveComp->MovementMode != MOVE_Walking) {
+        MoveComp->SetMovementMode(MOVE_Walking);
+      }
+      if (MoveComp->MaxWalkSpeed < 10.0f) {
+        MoveComp->MaxWalkSpeed = 600.0f;
+      }
+    }
+  }
+
+  const bool bForward = IsInputKeyDown(EKeys::W) || IsInputKeyDown(EKeys::Up);
+  const bool bBackward = IsInputKeyDown(EKeys::S) || IsInputKeyDown(EKeys::Down);
+  const bool bRight = IsInputKeyDown(EKeys::D) || IsInputKeyDown(EKeys::Right);
+  const bool bLeft = IsInputKeyDown(EKeys::A) || IsInputKeyDown(EKeys::Left);
+
+  const float ForwardScale = (bForward ? 1.0f : 0.0f) - (bBackward ? 1.0f : 0.0f);
+  const float RightScale = (bRight ? 1.0f : 0.0f) - (bLeft ? 1.0f : 0.0f);
+
+  if (!FMath::IsNearlyZero(ForwardScale)) {
+    ControlledPawn->AddMovementInput(FVector::XAxisVector, ForwardScale);
+  }
+  if (!FMath::IsNearlyZero(RightScale)) {
+    ControlledPawn->AddMovementInput(FVector::YAxisVector, RightScale);
+  }
 }
 
 void AWWPlayerController::TryStartBackgroundMusic() {

@@ -16,6 +16,7 @@ protected:
   virtual void BeginPlay() override;
   virtual void OnPossess(APawn* InPawn) override;
   virtual void PostInitializeComponents() override;
+  virtual void PlayerTick(float DeltaTime) override;
 
 private:
   void TryStartBackgroundMusic();

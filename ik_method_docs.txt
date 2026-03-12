@@ -1,0 +1,169 @@
+OBJECT <class 'IKRigController'>
+METHOD get_controller: <built-in method get_controller of type object at 0x000002BA77A6BD48>
+X.get_controller(ik_rig_definition) -> IKRigController
+Use this to get the controller for the given IKRig
+
+Args:
+    ik_rig_definition (IKRigDefinition): 
+
+Returns:
+    IKRigController:
+---
+METHOD set_skeletal_mesh: <method 'set_skeletal_mesh' of 'IKRigController' objects>
+x.set_skeletal_mesh(skeletal_mesh) -> bool
+Sets the preview mesh to use. Loads the hierarchy into the asset's IKRigSkeleton.
+Returns true if the mesh was able to be set. False if it was incompatible for any reason.
+
+Args:
+    skeletal_mesh (SkeletalMesh): 
+
+Returns:
+    bool:
+---
+METHOD apply_auto_generated_retarget_definition: <method 'apply_auto_generated_retarget_definition' of 'IKRigController' objects>
+x.apply_auto_generated_retarget_definition() -> bool
+Analyse the skeleton to see if it matches a known template and automatically generates all retarget chains and sets the pelvis
+Returns true if a matching skeletal template was found and the retarget definition for it was applied.
+
+Returns:
+    bool:
+---
+METHOD set_retarget_root: <method 'set_retarget_root' of 'IKRigController' objects>
+x.set_retarget_root(root_bone_name) -> bool
+Set the Root Bone of the retargeting (can only be one).
+
+Args:
+    root_bone_name (Name): 
+
+Returns:
+    bool:
+---
+METHOD add_retarget_chain: <method 'add_retarget_chain' of 'IKRigController' objects>
+x.add_retarget_chain(chain_name, start_bone_name, end_bone_name, goal_name) -> Name
+Add a new chain with the given Chain and Bone names. Returns newly created chain name (uniquified).
+Note: only the ChainName is required here, all else can be set later.
+
+Args:
+    chain_name (Name): 
+    start_bone_name (Name): 
+    end_bone_name (Name): 
+    goal_name (Name): 
+
+Returns:
+    Name:
+---
+METHOD get_retarget_chains: <method 'get_retarget_chains' of 'IKRigController' objects>
+x.get_retarget_chains() -> Array[BoneChain]
+Get read-only access to the list of Chains.
+
+Returns:
+    Array[BoneChain]:
+---
+OBJECT <class 'IKRetargeterController'>
+METHOD get_controller: <built-in method get_controller of type object at 0x000002BA77A696C8>
+X.get_controller(retargeter_asset) -> IKRetargeterController
+Get the controller for the given retargeter asset
+
+Args:
+    retargeter_asset (IKRetargeter): an IK Retarget asset
+
+Returns:
+    IKRetargeterController: the controller with an API for modifying the given retarget asset
+---
+METHOD set_ik_rig: <method 'set_ik_rig' of 'IKRetargeterController' objects>
+x.set_ik_rig(source_or_target, ik_rig) -> None
+Set the IK Rig to use as the source or target (to copy animation FROM/TO)
+
+Args:
+    source_or_target (RetargetSourceOrTarget): an enum specifying either "Source" or "Target"
+    ik_rig (IKRigDefinition):
+---
+METHOD auto_map_chains: <method 'auto_map_chains' of 'IKRetargeterController' objects>
+x.auto_map_chains(auto_map_type, force_remap, op_name="None") -> None
+Use string comparision to find "best" Source chain to map to each Target chain or clear the mappings
+
+Args:
+    auto_map_type (AutoMapChainType): an enum specifying the type of mapping to perform (ie, Exact, Fuzzy or Clear)
+    force_remap (bool): if false, will only remap those mappings that unset/None
+    op_name (Name): if specified, will auto-map only the chain mapping in the specified op, otherwise applies to all ops
+---
+METHOD get_ik_rig: <method 'get_ik_rig' of 'IKRetargeterController' objects>
+x.get_ik_rig(source_or_target) -> IKRigDefinition
+Get either source or target IK Rig
+
+Args:
+    source_or_target (RetargetSourceOrTarget): an enum specifying either "Source" or "Target"
+
+Returns:
+    IKRigDefinition: the IK Rig asset associated with either the Source or Target of the IK Retargeter
+---
+METHOD set_preview_mesh: <method 'set_preview_mesh' of 'IKRetargeterController' objects>
+x.set_preview_mesh(source_or_target, preview_mesh) -> None
+Set the preview skeletal mesh for either source or target
+
+Args:
+    source_or_target (RetargetSourceOrTarget): an enum specifying either "Source" or "Target"
+    preview_mesh (SkeletalMesh): a skeletal mesh asset to use as the preview mesh in the retarget editor (may be used on other meshes at runtime)
+---
+METHOD auto_align_all_bones: <method 'auto_align_all_bones' of 'IKRetargeterController' objects>
+x.auto_align_all_bones(source_or_target, method=RetargetAutoAlignMethod.CHAIN_TO_CHAIN) -> None
+Automatically align all bones in mapped chains and store in the current retarget pose.
+
+Args:
+    source_or_target (RetargetSourceOrTarget): Specifies whether to align bones in the source or target skeleton
+    method (RetargetAutoAlignMethod): The method to use for automatic alignment (defaults to ChainToChain)
+---
+METHOD set_source_chain: <method 'set_source_chain' of 'IKRetargeterController' objects>
+x.set_source_chain(source_chain_name, target_chain_name, op_name="None") -> bool
+Assign a source chain to the given target chain. Animation will be copied from the source to the target.
+
+Args:
+    source_chain_name (Name): the name of the source retarget chain to assign
+    target_chain_name (Name): the name of the target chain to map
+    op_name (Name): if specified, will set the source chain only for that op (otherwise applies to all ops with a chain mapping)
+
+Returns:
+    bool:
+---
+METHOD set_current_retarget_pose: <method 'set_current_retarget_pose' of 'IKRetargeterController' objects>
+x.set_current_retarget_pose(current_pose, source_or_target) -> bool
+Change which retarget pose is used by the retargeter at runtime.
+
+Args:
+    current_pose (Name): The name of the retarget pose to set as current
+    source_or_target (RetargetSourceOrTarget): Specifies whether the pose applies to the source or target skeleton
+
+Returns:
+    bool: True if the current pose was successfully set, false otherwise
+---
+METHOD get_all_chain_settings: <method 'get_all_chain_settings' of 'IKRetargeterController' objects>
+x.get_all_chain_settings() -> Array[RetargetChainSettings]
+Get All Chain Settings
+
+Returns:
+    Array[RetargetChainSettings]:
+---
+OBJECT <class 'IKRetargetBatchOperation'>
+METHOD duplicate_and_retarget: <built-in method duplicate_and_retarget of type object at 0x000002BA77A68548>
+X.duplicate_and_retarget(assets_to_retarget, source_mesh, target_mesh, ik_retarget_asset, search="", replace="", prefix="", suffix="", include_referenced_assets=True, overwrite_existing_files=False) -> Array[AssetData]
+Convenience function to run a batch animation retarget from Blueprint / Python. This function will duplicate a list of
+       * assets and use the supplied IK Retargeter to retarget the animation from the source to the target using the
+       * settings in the provided IK Retargeter asset.
+       *
+       *
+
+Args:
+    assets_to_retarget (Array[AssetData]): A list of animation assets to retarget (sequences, blendspaces or montages) *
+    source_mesh (SkeletalMesh): The skeletal mesh with desired proportions to playback the assets to retarget *
+    target_mesh (SkeletalMesh): The skeletal mesh to retarget the animation onto. *
+    ik_retarget_asset (IKRetargeter): The IK Retargeter asset with IK Rigs appropriate for the source and target skeletal mesh *
+    search (str): A string to search for in the file name (replaced with "Replace" string) *
+    replace (str): A string to replace with in the file name *
+    prefix (str): A string to add to the start of the new file name *
+    suffix (str): A string to add at the end of the new file name *
+    include_referenced_assets (bool): Whether to retarget animation assets referenced by the AssetsToRetarget *
+    overwrite_existing_files (bool): Whether to overwrite any existing output files with the same name, or create new files with a unique name * * Return: list of new animation files created.
+
+Returns:
+    Array[AssetData]:
+---

@@ -58,6 +58,8 @@ private:
   float LastFootstepTime;
   bool bIsMoving;
   bool bUsingMoveAnimation;
+  bool bUseAnimationBlueprintLocomotion;
+  bool bSkipIdleSingleNodeAnimation;
   UAnimationAsset *IdleAnimationAsset;
   UAnimationAsset *MoveAnimationAsset;
 

@@ -22,6 +22,7 @@
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Sound/SoundBase.h"
+#include "InputCoreTypes.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WWEnemy.h"
 #include "WWOrbitingPickaxe.h"
@@ -30,6 +31,65 @@
 namespace {
 constexpr float kLockedCameraArmLength = 820.0f;
 const FRotator kLockedCameraRotation(-32.0f, 18.0f, 0.0f);
+
+void AutoUprightMeshFromBone(USkeletalMeshComponent* MeshComp) {
+  if (!MeshComp) {
+    return;
+  }
+
+  static const FName LowerBodyCandidates[] = {
+      FName("pelvis"), FName("root"), FName("Hips"), FName("spine_01"), FName("spine")};
+  static const FName UpperBodyCandidates[] = {
+      FName("head"), FName("Head"), FName("neck_01"), FName("neck"), FName("spine_03"), FName("spine_02")};
+
+  FName LowerBone = NAME_None;
+  for (const FName BoneName : LowerBodyCandidates) {
+    if (MeshComp->GetBoneIndex(BoneName) != INDEX_NONE) {
+      LowerBone = BoneName;
+      break;
+    }
+  }
+
+  FName UpperBone = NAME_None;
+  for (const FName BoneName : UpperBodyCandidates) {
+    if (MeshComp->GetBoneIndex(BoneName) != INDEX_NONE) {
+      UpperBone = BoneName;
+      break;
+    }
+  }
+
+  FVector BodyUp = FVector::ZeroVector;
+
+  if (!LowerBone.IsNone() && !UpperBone.IsNone()) {
+    const FVector LowerPos = MeshComp->GetBoneLocation(LowerBone, EBoneSpaces::ComponentSpace);
+    const FVector UpperPos = MeshComp->GetBoneLocation(UpperBone, EBoneSpaces::ComponentSpace);
+    BodyUp = (UpperPos - LowerPos).GetSafeNormal();
+  }
+
+  if (BodyUp.IsNearlyZero()) {
+    // Fallback to a single-bone up vector if the mesh doesn't expose useful torso bones.
+    FName FallbackBone = !LowerBone.IsNone() ? LowerBone : FName("root");
+    if (MeshComp->GetBoneIndex(FallbackBone) == INDEX_NONE) {
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Auto-upright skipped (no usable orientation bones found)."));
+      return;
+    }
+    BodyUp = MeshComp->GetBoneQuaternion(FallbackBone, EBoneSpaces::ComponentSpace).GetUpVector().GetSafeNormal();
+  }
+
+  if (BodyUp.IsNearlyZero()) {
+    UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Auto-upright skipped (computed body up is zero)."));
+    return;
+  }
+
+  const FQuat AlignQuat = FQuat::FindBetweenNormals(BodyUp, FVector::UpVector);
+  MeshComp->AddLocalRotation(AlignQuat);
+
+  const FRotator Corrected = MeshComp->GetRelativeRotation();
+  UE_LOG(LogTemp, Warning,
+         TEXT("[MESH_VERIFY] Player auto-upright lower=%s upper=%s up=(%.2f,%.2f,%.2f) final rot: P=%.1f Y=%.1f R=%.1f"),
+         *LowerBone.ToString(), *UpperBone.ToString(), BodyUp.X, BodyUp.Y, BodyUp.Z,
+         Corrected.Pitch, Corrected.Yaw, Corrected.Roll);
+}
 
 UStaticMesh* LoadFirstStaticMesh(std::initializer_list<const TCHAR*> Paths) {
   for (const TCHAR* Path : Paths) {
@@ -94,6 +154,8 @@ AWWCharacter::AWWCharacter() {
   bIsMoving = false;
   bIsAttacking = false;
   bUsingMoveAnimation = false;
+  bUseAnimationBlueprintLocomotion = false;
+  bSkipIdleSingleNodeAnimation = false;
   bShowAnimationDebug = false;
   bAwaitingSkillChoice = false;
   PendingSkillChoices = 0;
@@ -219,87 +281,83 @@ void AWWCharacter::BeginPlay() {
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
     bool bUsingTinyBody = false;
-    bool bUsingTinySkeletal = false;
+    bool bUsingImportedPlayerSkeletal = false;
 
-    // Tiny cowboy skeletal import is currently unstable (invalid helper geometry / skeleton drift),
-    // so force the known-good static tiny body path for the player.
-    USkeletalMesh* TinyCowboySkeletal = nullptr;
+    USkeletalMesh* ImportedPlayerSkeletal = LoadFirstSkeletalMesh({
+      TEXT("/Game/ImportedCharacters/Western/SK_WesternPlayer.SK_WesternPlayer"),
+      TEXT("/Game/Assets/SKM_Tiny_Cowboy.SKM_Tiny_Cowboy")});
 
-    UStaticMesh* TinyCowboyMesh = LoadFirstStaticMesh({
-      TEXT("/Game/Assets/Tiny_Cowboy.Tiny_Cowboy"),
-      TEXT("/Game/Assets/FreeWestern/Tiny_Cowboy.Tiny_Cowboy")});
-
-    if (TinyCowboySkeletal) {
-      bool bSkeletalLooksValid = true;
-      USkeletalMesh* MannyForValidation = LoadFirstSkeletalMesh({
-        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
-        TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
-
-      if (MannyForValidation) {
-        const float TinyHeight = TinyCowboySkeletal->GetBounds().BoxExtent.Z * 2.0f;
-        const float MannyHeight = MannyForValidation->GetBounds().BoxExtent.Z * 2.0f;
-        if (TinyHeight <= KINDA_SMALL_NUMBER || MannyHeight <= KINDA_SMALL_NUMBER) {
-          bSkeletalLooksValid = false;
-        } else {
-          const float HeightRatio = TinyHeight / MannyHeight;
-          // Reject malformed imports (for example giant helper geometry becoming the mesh).
-          bSkeletalLooksValid = HeightRatio > 0.15f && HeightRatio < 3.0f;
-          if (!bSkeletalLooksValid) {
-            UE_LOG(LogTemp, Warning,
-                TEXT("Tiny cowboy skeletal rejected (height ratio %.3f). Falling back to static tiny mesh."),
-                HeightRatio);
-          }
-        }
-      }
-
-      if (bSkeletalLooksValid) {
-        CharacterMesh->SetSkeletalMesh(TinyCowboySkeletal);
-        CharacterMesh->SetVisibility(true, true);
-        CharacterMesh->SetHiddenInGame(false);
-        if (TinyBodyComp) {
-          TinyBodyComp->SetHiddenInGame(true);
-          TinyBodyComp->SetVisibility(false, true);
-        }
-        bUsingTinySkeletal = true;
-      }
-    }
-
-    if (!bUsingTinySkeletal && TinyBodyComp && TinyCowboyMesh) {
-      TinyBodyComp->AttachToComponent(CharacterMesh, FAttachmentTransformRules::KeepRelativeTransform);
-      TinyBodyComp->SetStaticMesh(TinyCowboyMesh);
-
+    const bool bAllowImportedPlayerRuntime = true;
+    if (ImportedPlayerSkeletal && bAllowImportedPlayerRuntime) {
+      float PlayerScale = 1.0f;
       USkeletalMesh* MannyForScale = LoadFirstSkeletalMesh({
         TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
         TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
-      float TinyScale = 1.0f;
       if (MannyForScale) {
-        const float TinyHeight = TinyCowboyMesh->GetBounds().BoxExtent.Z * 2.0f;
+        const float ImportedHeight = ImportedPlayerSkeletal->GetBounds().BoxExtent.Z * 2.0f;
         const float MannyHeight = MannyForScale->GetBounds().BoxExtent.Z * 2.0f;
-        if (TinyHeight > KINDA_SMALL_NUMBER) {
-          TinyScale = FMath::Clamp(MannyHeight / TinyHeight, 0.25f, 8.0f);
+        if (ImportedHeight > KINDA_SMALL_NUMBER && MannyHeight > KINDA_SMALL_NUMBER) {
+          PlayerScale = FMath::Clamp(MannyHeight / ImportedHeight, 0.2f, 2.0f);
         }
       }
 
-      TinyBodyComp->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
-      TinyBodyComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
-      TinyBodyComp->SetRelativeScale3D(FVector(TinyScale, TinyScale, TinyScale));
-      TinyBodyComp->SetHiddenInGame(false);
-      TinyBodyComp->SetVisibility(true, true);
-      CharacterMesh->SetHiddenInGame(true);
-      CharacterMesh->SetVisibility(false, true);
-      bUsingTinyBody = true;
+      CharacterMesh->SetSkeletalMesh(ImportedPlayerSkeletal);
+      CharacterMesh->SetRelativeScale3D(FVector(PlayerScale, PlayerScale, PlayerScale));
+      CharacterMesh->SetVisibility(true, true);
+      CharacterMesh->SetHiddenInGame(false);
+      CharacterMesh->SetSimulatePhysics(false);
+      CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
+      CharacterMesh->SetRelativeRotation(FRotator::ZeroRotator);
+      AutoUprightMeshFromBone(CharacterMesh);
+      // Western import faces 90 deg off without this corrective yaw.
+      CharacterMesh->AddLocalRotation(FRotator(0.0f, -90.0f, 0.0f));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Player mesh selected: %s"), *GetPathNameSafe(ImportedPlayerSkeletal));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Player mesh scale applied: %.3f"), PlayerScale);
+      if (TinyBodyComp) {
+        TinyBodyComp->SetHiddenInGame(true);
+        TinyBodyComp->SetVisibility(false, true);
+      }
+      if (HatBrimComp) {
+        HatBrimComp->SetStaticMesh(nullptr);
+        HatBrimComp->SetHiddenInGame(true);
+        HatBrimComp->SetVisibility(false, true);
+      }
+      if (HatCrownComp) {
+        HatCrownComp->SetStaticMesh(nullptr);
+        HatCrownComp->SetHiddenInGame(true);
+        HatCrownComp->SetVisibility(false, true);
+      }
+      bUsingImportedPlayerSkeletal = true;
+      bUseAnimationBlueprintLocomotion = false;
+      bSkipIdleSingleNodeAnimation = false;
+
+      UAnimationAsset* WesternIdle = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/RTG_Western_MM_Idle.RTG_Western_MM_Idle")));
+      UAnimationAsset* WesternMove = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/RTG_Western_MF_Unarmed_Jog_Fwd.RTG_Western_MF_Unarmed_Jog_Fwd")));
+      if (WesternIdle) {
+        IdleAnimationAsset = WesternIdle;
+      }
+      if (WesternMove) {
+        MoveAnimationAsset = WesternMove;
+      }
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Western retarget idle loaded: %s"), IdleAnimationAsset ? TEXT("YES") : TEXT("NO"));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Western retarget move loaded: %s"), MoveAnimationAsset ? TEXT("YES") : TEXT("NO"));
     }
 
     USkeletalMesh* MannyMesh = LoadFirstSkeletalMesh({
       TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"),
       TEXT("/Game/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")});
 
-    if (MannyMesh && !bUsingTinySkeletal) {
+    if (MannyMesh && !bUsingImportedPlayerSkeletal) {
       CharacterMesh->SetSkeletalMesh(MannyMesh);
       CharacterMesh->SetVisibility(!bUsingTinyBody, true);
       CharacterMesh->SetHiddenInGame(bUsingTinyBody);
       CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+      UE_LOG(LogTemp, Warning, TEXT("[MESH_VERIFY] Player fallback mesh selected: %s"), *GetPathNameSafe(MannyMesh));
 
         UMaterialInterface *MannyMat01 = Cast<UMaterialInterface>(StaticLoadObject(
           UMaterialInterface::StaticClass(), nullptr,
@@ -351,38 +409,48 @@ void AWWCharacter::BeginPlay() {
           BodyMat->SetVectorParameterValue(FName("DiffuseColor"), SlotColor);
         }
       }
-    } else if (!bUsingTinySkeletal) {
+    } else if (!bUsingImportedPlayerSkeletal) {
       UE_LOG(LogTemp, Error, TEXT("Failed to load Manny skeletal mesh for player"));
     }
 
-    IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+    if (!bUsingImportedPlayerSkeletal) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
         TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    if (!IdleAnimationAsset) {
+      if (!IdleAnimationAsset) {
       IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    }
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
+      }
 
-    MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
         TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
-    if (!MoveAnimationAsset) {
+      if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+        UAnimationAsset::StaticClass(), nullptr,
+        TEXT("/Game/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd")));
+      }
     }
 
-    if (IdleAnimationAsset) {
-      CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
+    if (bUsingImportedPlayerSkeletal) {
+      if (IdleAnimationAsset) {
+        CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+        CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
+      }
       bUsingMoveAnimation = false;
     } else {
-      UE_LOG(LogTemp, Warning, TEXT("Failed to load idle locomotion animation for player"));
-    }
+      if (IdleAnimationAsset) {
+        CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+        CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
+        bUsingMoveAnimation = false;
+      } else {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to load idle locomotion animation for player"));
+      }
 
-    if (!MoveAnimationAsset) {
-      UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for player"));
+      if (!MoveAnimationAsset) {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to load move locomotion animation for player"));
+      }
     }
 
     UStaticMesh* SheriffHatWhole = LoadFirstStaticMesh({
@@ -395,7 +463,7 @@ void AWWCharacter::BeginPlay() {
     }
 
     if (HatBrimComp && HatCrownComp) {
-      if (bUsingTinyBody || bUsingTinySkeletal) {
+      if (bUsingTinyBody) {
         HatBrimComp->SetStaticMesh(nullptr);
         HatCrownComp->SetStaticMesh(nullptr);
         HatBrimComp->SetVisibility(false, true);
@@ -561,6 +629,28 @@ void AWWCharacter::Tick(float DeltaTime) {
     SpringArmComp->bEnableCameraLag = false;
   }
 
+  // Input fallback: move with keys even if project axis mappings are missing.
+  if (IsLocallyControlled() && Controller) {
+    if (const APlayerController* PC = Cast<APlayerController>(Controller)) {
+      const bool bForward = PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up);
+      const bool bBackward = PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down);
+      const bool bRight = PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Right);
+      const bool bLeft = PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Left);
+
+      const float ForwardScale = (bForward ? 1.0f : 0.0f) - (bBackward ? 1.0f : 0.0f);
+      const float RightScale = (bRight ? 1.0f : 0.0f) - (bLeft ? 1.0f : 0.0f);
+
+      if (!FMath::IsNearlyZero(ForwardScale)) {
+        AddMovementInput(FVector::XAxisVector, ForwardScale);
+      }
+      if (!FMath::IsNearlyZero(RightScale)) {
+        AddMovementInput(FVector::YAxisVector, RightScale);
+      }
+    }
+  }
+
+  bIsMoving = GetVelocity().Size2D() > 5.0f;
+
   if (bIsMoving) {
     LastFootstepTime += DeltaTime;
     if (LastFootstepTime >= 0.35f) {
@@ -579,14 +669,31 @@ void AWWCharacter::Tick(float DeltaTime) {
   }
 
   if (USkeletalMeshComponent* CharacterMesh = GetMesh()) {
-    if (bIsMoving && MoveAnimationAsset && !bUsingMoveAnimation) {
-      CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      CharacterMesh->PlayAnimation(MoveAnimationAsset, true);
-      bUsingMoveAnimation = true;
-    } else if (!bIsMoving && IdleAnimationAsset && bUsingMoveAnimation) {
-      CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-      CharacterMesh->PlayAnimation(IdleAnimationAsset, true);
+    if (bUseAnimationBlueprintLocomotion) {
+      if (CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint) {
+        CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+      }
       bUsingMoveAnimation = false;
+    } else {
+      UAnimationAsset* DesiredAnim = nullptr;
+      if (bIsMoving) {
+        DesiredAnim = MoveAnimationAsset;
+      } else if (!bSkipIdleSingleNodeAnimation) {
+        DesiredAnim = IdleAnimationAsset;
+      }
+
+      if (DesiredAnim) {
+        UAnimSingleNodeInstance* SingleNode = CharacterMesh->GetSingleNodeInstance();
+        UAnimationAsset* CurrentAnim = SingleNode ? SingleNode->GetCurrentAsset() : nullptr;
+        if (CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationSingleNode || CurrentAnim != DesiredAnim) {
+          CharacterMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+          CharacterMesh->PlayAnimation(DesiredAnim, true);
+        }
+        bUsingMoveAnimation = bIsMoving;
+      } else if (bSkipIdleSingleNodeAnimation) {
+        CharacterMesh->Stop();
+        bUsingMoveAnimation = false;
+      }
     }
   }
 
