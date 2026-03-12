@@ -39,13 +39,13 @@ AWWCrystalPickup::AWWCrystalPickup() {
   CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AWWCrystalPickup::OnOverlap);
   RootComponent = CollisionComp;
 
-  // Flat coin: wide cylinder, thin in Z, lying flat on the ground.
+  // Flat coin: upright (vertical) disc.
   MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
   MeshComp->SetupAttachment(RootComponent);
   MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 5.0f));
+  MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 22.0f));
   MeshComp->SetRelativeScale3D(FVector(0.5f, 0.5f, 0.04f)); // wide flat disc
-  MeshComp->SetRelativeRotation(FRotator::ZeroRotator);
+  MeshComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
 
   SecondaryMeshComp =
       CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SecondaryMeshComp"));
@@ -92,6 +92,10 @@ void AWWCrystalPickup::TryPickup(AWWCharacter *Player) {
 
 void AWWCrystalPickup::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
+  if (MeshComp) {
+    // Keep coins visually alive and easy to spot.
+    MeshComp->AddLocalRotation(FRotator(0.0f, SpinDegreesPerSecond * DeltaTime, 0.0f));
+  }
   if (bPickedUp) return;
   // 0.75s grace period so the crystal is visible before it can be auto-collected
   // (enemies often die <120 units from the player due to contact damage).

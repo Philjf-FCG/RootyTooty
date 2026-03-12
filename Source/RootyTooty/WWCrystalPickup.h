@@ -53,4 +53,5 @@ private:
 
   bool bPickedUp = false;
   float SpawnTime = 0.0f; // grace period: don't auto-collect immediately on spawn
+  float SpinDegreesPerSecond = 180.0f;
 };
