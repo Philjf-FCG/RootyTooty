@@ -52,4 +52,5 @@ private:
   void TryPickup(class AWWCharacter *Player);
 
   bool bPickedUp = false;
+  float SpawnTime = 0.0f; // grace period: don't auto-collect immediately on spawn
 };

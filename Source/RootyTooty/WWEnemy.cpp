@@ -241,6 +241,7 @@ void AWWEnemy::BeginPlay() {
 
 void AWWEnemy::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
+  if (bIsDead) return; // don't move or damage after death
 
   APawn *PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
   if (PlayerPawn) {
@@ -327,6 +328,14 @@ float AWWEnemy::TakeDamage(float DamageAmount, FDamageEvent const &DamageEvent,
 
 void AWWEnemy::Die() {
   UE_LOG(LogTemp, Display, TEXT("Enemy %s died"), *GetName());
+
+  // Stop all movement immediately so the CMC doesn't vibrate the corpse
+  // while the actor waits to be cleaned up by the engine.
+  if (GetCharacterMovement()) {
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->SetMovementMode(MOVE_None);
+    GetCharacterMovement()->GravityScale = 0.0f;
+  }
 
   SetActorEnableCollision(false);
   if (GetCapsuleComponent()) {

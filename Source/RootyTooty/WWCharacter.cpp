@@ -208,15 +208,20 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingWestern) {
-        // Capture current world-space capsule half-height BEFORE scaling so we can
-        // compensate the actor Z afterwards (scaling shrinks the capsule but leaves
-        // the capsule centre unchanged, which would leave the character floating).
-        const float PreScaleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         SetActorScale3D(FVector(0.257f));
-        const float PostScaleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-        // Move the actor down by the deficit so the capsule bottom stays at floor level.
-        const FVector ScaleOffset(0.f, 0.f, PostScaleHalfHeight - PreScaleHalfHeight);
-        SetActorLocation(GetActorLocation() + ScaleOffset, false, nullptr, ETeleportType::TeleportPhysics);
+        // Line-trace straight down to find the actual floor so we can snap the
+        // capsule bottom to it regardless of level geometry or spawn height.
+        {
+          const float HalfH = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+          FHitResult FloorHit;
+          const FVector TraceStart = GetActorLocation() + FVector(0.f, 0.f, 200.f);
+          const FVector TraceEnd   = GetActorLocation() - FVector(0.f, 0.f, 500.f);
+          FCollisionQueryParams Q;
+          Q.AddIgnoredActor(this);
+          if (GetWorld()->LineTraceSingleByChannel(FloorHit, TraceStart, TraceEnd, ECC_Visibility, Q)) {
+            SetActorLocation(FloorHit.Location + FVector(0.f, 0.f, HalfH), false, nullptr, ETeleportType::TeleportPhysics);
+          }
+        }
 
         UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,

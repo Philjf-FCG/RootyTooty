@@ -64,6 +64,7 @@ AWWCrystalPickup::AWWCrystalPickup() {
 
 void AWWCrystalPickup::BeginPlay() {
   Super::BeginPlay();
+  SpawnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
   // Always bright red, emissive so it stands out on the ground.
   const FLinearColor CrystalRed = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
@@ -88,6 +89,9 @@ void AWWCrystalPickup::TryPickup(AWWCharacter *Player) {
 void AWWCrystalPickup::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
   if (bPickedUp) return;
+  // 0.75s grace period so the crystal is visible before it can be auto-collected
+  // (enemies often die <120 units from the player due to contact damage).
+  if (GetWorld() && (GetWorld()->GetTimeSeconds() - SpawnTime) < 0.75f) return;
   // Proximity check — bypasses the overlap channel issue caused by SetActorScale3D
   // shrinking the Western player's capsule to ~8 units radius.
   APawn *P = UGameplayStatics::GetPlayerPawn(this, 0);
