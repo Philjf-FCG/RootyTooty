@@ -66,13 +66,17 @@ void AWWCrystalPickup::BeginPlay() {
   Super::BeginPlay();
   SpawnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
-  // Always bright red, emissive so it stands out on the ground.
-  const FLinearColor CrystalRed = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
-  if (UMaterialInstanceDynamic *MID = MeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
-    MID->SetVectorParameterValue(FName("BaseColor"), CrystalRed);
+  // Use the project's red plaid material for a bright red crystal.
+  // Fall back to creating a MID on the basic shape material if not found.
+  UMaterialInterface* RedMat = Cast<UMaterialInterface>(StaticLoadObject(
+      UMaterialInterface::StaticClass(), nullptr,
+      TEXT("/Game/CharacterLooks/Materials/M_red_plaid.M_red_plaid")));
+  if (RedMat) {
+    MeshComp->SetMaterial(0, RedMat);
+  } else if (UMaterialInstanceDynamic *MID = MeshComp->CreateAndSetMaterialInstanceDynamic(0)) {
+    const FLinearColor CrystalRed = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
     MID->SetVectorParameterValue(FName("Color"), CrystalRed);
-    MID->SetVectorParameterValue(FName("Tint"), CrystalRed);
-    MID->SetVectorParameterValue(FName("EmissiveColor"), CrystalRed * 4.0f);
+    MID->SetVectorParameterValue(FName("BaseColor"), CrystalRed);
   }
 }
 

@@ -148,6 +148,18 @@ AWWCharacter::AWWCharacter() {
     GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
     GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
   }
+
+  // Pre-scale for the Western character so UE uses the correct (small) capsule when
+  // placing the character at the PlayerStart.  Without this, the capsule starts at
+  // full size, gets scaled down in BeginPlay while already on the floor, and the
+  // centre stays at the same world Z -- leaving the character floating.
+  {
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WesternFinder(
+        TEXT("/Game/ImportedCharacters/Western/SK_WesternPlayer.SK_WesternPlayer"));
+    if (WesternFinder.Succeeded()) {
+      SetActorScale3D(FVector(0.257f));
+    }
+  }
 }
 
 void AWWCharacter::BeginPlay() {
@@ -208,20 +220,9 @@ void AWWCharacter::BeginPlay() {
       CharacterMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingWestern) {
-        SetActorScale3D(FVector(0.257f));
-        // Line-trace straight down to find the actual floor so we can snap the
-        // capsule bottom to it regardless of level geometry or spawn height.
-        {
-          const float HalfH = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-          FHitResult FloorHit;
-          const FVector TraceStart = GetActorLocation() + FVector(0.f, 0.f, 200.f);
-          const FVector TraceEnd   = GetActorLocation() - FVector(0.f, 0.f, 500.f);
-          FCollisionQueryParams Q;
-          Q.AddIgnoredActor(this);
-          if (GetWorld()->LineTraceSingleByChannel(FloorHit, TraceStart, TraceEnd, ECC_Visibility, Q)) {
-            SetActorLocation(FloorHit.Location + FVector(0.f, 0.f, HalfH), false, nullptr, ETeleportType::TeleportPhysics);
-          }
-        }
+        // Scale already applied in the constructor -- UE spawned the actor with the
+        // correct small capsule so no runtime Z correction is needed here.
+        SetActorScale3D(FVector(0.257f)); // no-op if constructor already set it; safe to call again
 
         UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
