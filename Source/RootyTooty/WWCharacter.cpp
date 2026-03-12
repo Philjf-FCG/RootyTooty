@@ -157,6 +157,33 @@ void AWWCharacter::BeginPlay() {
   // Keep capsule physics and navigation stable.
   // Scale the visual mesh instead of scaling the whole actor.
   SetActorScale3D(FVector(1.0f));
+  if (UCapsuleComponent* Capsule = GetCapsuleComponent()) {
+    Capsule->SetCapsuleSize(42.0f, 96.0f, true);
+  }
+  if (UCharacterMovementComponent* MoveComp = GetCharacterMovement()) {
+    MoveComp->GravityScale = 1.0f;
+    MoveComp->SetMovementMode(MOVE_Walking);
+  }
+
+  // Snap actor to floor in case placed/serialized with stale transform overrides.
+  {
+    FHitResult FloorHit;
+    const FVector TraceStart = GetActorLocation() + FVector(0.0f, 0.0f, 200.0f);
+    const FVector TraceEnd = GetActorLocation() - FVector(0.0f, 0.0f, 2000.0f);
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+    if (GetWorld()->LineTraceSingleByChannel(
+            FloorHit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams)) {
+      const float CapsuleHalfHeight = GetCapsuleComponent()
+                                          ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+                                          : 96.0f;
+      SetActorLocation(FVector(
+          GetActorLocation().X,
+          GetActorLocation().Y,
+          FloorHit.ImpactPoint.Z + CapsuleHalfHeight + 1.0f),
+          false, nullptr, ETeleportType::TeleportPhysics);
+    }
+  }
 
   if (SpringArmComp) {
     // Re-apply every startup in case a Blueprint override re-enabled spring collision.
@@ -216,7 +243,7 @@ void AWWCharacter::BeginPlay() {
         // Imported Western mesh is large; scale the mesh only so capsule/floor
         // interactions remain at mannequin defaults.
         CharacterMesh->SetRelativeScale3D(FVector(0.257f));
-        CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -23.13f));
+        CharacterMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
 
         UMaterialInterface* WesternMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,

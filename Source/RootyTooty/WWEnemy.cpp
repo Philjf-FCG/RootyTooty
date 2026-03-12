@@ -116,8 +116,8 @@ void AWWEnemy::BeginPlay() {
       EnemyMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 
       if (bUsingBobrito) {
-        // Bobrito import uses a much smaller source scale than mannequin rigs.
-        EnemyMesh->SetRelativeScale3D(FVector(3.891f));
+        // Keep Bobrito at mannequin-scale visuals unless explicitly tuned.
+        EnemyMesh->SetRelativeScale3D(FVector(1.0f));
         UMaterialInterface* BobritoMat = Cast<UMaterialInterface>(StaticLoadObject(
             UMaterialInterface::StaticClass(), nullptr,
             TEXT("/Game/ImportedCharacters/Bobrito/M_BobritoImported.M_BobritoImported")));
