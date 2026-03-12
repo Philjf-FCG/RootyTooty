@@ -62,7 +62,7 @@ AWWCrystalPickup::AWWCrystalPickup() {
     MeshComp->SetStaticMesh(FazCoinMesh);
     MeshComp->SetRelativeLocation(FVector(0.0f, 0.0f, 20.0f));
     MeshComp->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.22f));
-    MeshComp->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+    MeshComp->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
     bUsingFazCoinVisual = true;
   } else {
     static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
@@ -108,7 +108,7 @@ void AWWCrystalPickup::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
   if (MeshComp) {
     // Keep coins visually alive and easy to spot.
-    MeshComp->AddLocalRotation(FRotator(0.0f, SpinDegreesPerSecond * DeltaTime, 0.0f));
+    MeshComp->AddLocalRotation(FRotator(SpinDegreesPerSecond * DeltaTime, 0.0f, 0.0f));
   }
   if (bPickedUp) return;
   // 0.75s grace period so the crystal is visible before it can be auto-collected

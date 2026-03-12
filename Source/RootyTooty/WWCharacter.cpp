@@ -330,8 +330,13 @@ void AWWCharacter::BeginPlay() {
     }
 
     MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+      UAnimationAsset::StaticClass(), nullptr,
+      TEXT("/Game/RTG_Western_MF_Pistol_Jog_Fwd.RTG_Western_MF_Pistol_Jog_Fwd")));
+    if (!MoveAnimationAsset) {
+      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
         TEXT("/Game/RTG_Western_MF_Unarmed_Jog_Fwd.RTG_Western_MF_Unarmed_Jog_Fwd")));
+    }
     if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
@@ -504,6 +509,7 @@ void AWWCharacter::Tick(float DeltaTime) {
         SingleNode->SetPlayRate(1.0f);
       }
     }
+
   }
 
   FireTimer += DeltaTime;
