@@ -30,6 +30,7 @@ AWWPlayerController::AWWPlayerController(
   BackgroundMusicComponent = nullptr;
   MusicStartAttempts = 0;
   HudPanelWidget = nullptr;
+  ObservedHudCharacter = nullptr;
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] WWPlayerController Initialized (AUDIO_PATCH_V2)"));
 }
 
@@ -46,13 +47,24 @@ void AWWPlayerController::BeginPlay() {
   SetIgnoreLookInput(false);
 
   EnsureHudPanel();
-  RefreshHudPanel();
+  BindHudToCurrentCharacter();
 
   TryStartBackgroundMusic();
 }
 
+void AWWPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason) {
+  if (ObservedHudCharacter) {
+    ObservedHudCharacter->OnStatsChanged().RemoveAll(this);
+    ObservedHudCharacter = nullptr;
+  }
+
+  Super::EndPlay(EndPlayReason);
+}
+
 void AWWPlayerController::OnPossess(APawn* InPawn) {
   Super::OnPossess(InPawn);
+
+  BindHudToCurrentCharacter();
 
   TryStartBackgroundMusic();
 }
@@ -66,7 +78,9 @@ void AWWPlayerController::PostInitializeComponents() {
 void AWWPlayerController::PlayerTick(float DeltaTime) {
   Super::PlayerTick(DeltaTime);
 
-  RefreshHudPanel();
+  if (Cast<AWWCharacter>(GetPawn()) != ObservedHudCharacter) {
+    BindHudToCurrentCharacter();
+  }
 
   if (!IsLocalController() || IsMoveInputIgnored()) {
     return;
@@ -104,15 +118,74 @@ void AWWPlayerController::PlayerTick(float DeltaTime) {
   }
 }
 
-void AWWPlayerController::EnsureHudPanel() {
-  if (!IsLocalController() || HudPanelWidget) {
+void AWWPlayerController::BindHudToCurrentCharacter() {
+  AWWCharacter* NewCharacter = Cast<AWWCharacter>(GetPawn());
+  if (ObservedHudCharacter == NewCharacter) {
+    if (ObservedHudCharacter) {
+      HandleObservedCharacterStatsChanged();
+    }
     return;
   }
 
-  HudPanelWidget = CreateWidget<UWWUpgradePanelWidget>(this, UWWUpgradePanelWidget::StaticClass());
-  if (HudPanelWidget) {
-    HudPanelWidget->AddToViewport(20);
+  if (ObservedHudCharacter) {
+    ObservedHudCharacter->OnStatsChanged().RemoveAll(this);
   }
+
+  ObservedHudCharacter = NewCharacter;
+
+  if (ObservedHudCharacter) {
+    ObservedHudCharacter->OnStatsChanged().AddUObject(this, &AWWPlayerController::HandleObservedCharacterStatsChanged);
+    HandleObservedCharacterStatsChanged();
+    UE_LOG(LogTemp, Warning, TEXT("[HUD] Bound stats delegate to %s"), *ObservedHudCharacter->GetName());
+  }
+}
+
+void AWWPlayerController::HandleObservedCharacterStatsChanged() {
+  RefreshHudPanel();
+}
+
+void AWWPlayerController::EnsureHudPanel() {
+  if (!IsLocalController()) {
+    return;
+  }
+
+  if (HudPanelWidget) {
+    return;
+  }
+
+  UClass* WidgetClassToUse = HudPanelWidgetClass.Get();
+  if (!WidgetClassToUse) {
+    WidgetClassToUse = StaticLoadClass(UWWUpgradePanelWidget::StaticClass(), nullptr,
+                                       TEXT("/Game/UI/WBP_HUDPanel.WBP_HUDPanel_C"));
+  }
+  if (!WidgetClassToUse) {
+    WidgetClassToUse = StaticLoadClass(UWWUpgradePanelWidget::StaticClass(), nullptr,
+                                       TEXT("/Game/UI/WBP_HUD.WBP_HUD_C"));
+  }
+
+  if (WidgetClassToUse) {
+    UE_LOG(LogTemp, Warning, TEXT("[HUD] Using widget class: %s"), *WidgetClassToUse->GetPathName());
+  } else {
+    WidgetClassToUse = UWWUpgradePanelWidget::StaticClass();
+    UE_LOG(LogTemp, Warning, TEXT("[HUD] No Widget BP found, falling back to C++ class: %s"),
+           *WidgetClassToUse->GetPathName());
+  }
+
+  HudPanelWidget = CreateWidget<UWWUpgradePanelWidget>(this, WidgetClassToUse);
+  if (!HudPanelWidget) {
+    UE_LOG(LogTemp, Error, TEXT("[HUD] Failed to create UWWUpgradePanelWidget"));
+    return;
+  }
+
+  HudPanelWidget->AddToPlayerScreen(1000);
+  HudPanelWidget->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+  HudPanelWidget->SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+  HudPanelWidget->SetPositionInViewport(FVector2D(16.0f, 16.0f), false);
+  HudPanelWidget->SetDesiredSizeInViewport(FVector2D(340.0f, 620.0f));
+  HudPanelWidget->SetVisibility(ESlateVisibility::Visible);
+  HudPanelWidget->SetIsEnabled(true);
+  HudPanelWidget->SetRenderOpacity(1.0f);
+  UE_LOG(LogTemp, Warning, TEXT("[HUD] Stats panel created and added to viewport"));
 }
 
 void AWWPlayerController::RefreshHudPanel() {
@@ -121,14 +194,13 @@ void AWWPlayerController::RefreshHudPanel() {
     return;
   }
 
-  AWWCharacter* PlayerCharacter = Cast<AWWCharacter>(GetPawn());
+  AWWCharacter* PlayerCharacter = ObservedHudCharacter ? ObservedHudCharacter : Cast<AWWCharacter>(GetPawn());
   if (!PlayerCharacter) {
     return;
   }
 
-  const int32 Score = GetPlayerState<APlayerState>()
-                          ? FMath::RoundToInt(GetPlayerState<APlayerState>()->GetScore())
-                          : 0;
+  const APlayerState* PS = GetPlayerState<APlayerState>();
+  const int32 Score = PS ? FMath::RoundToInt(PS->GetScore()) : 0;
 
   HudPanelWidget->UpdateStatsPanel(
       Score,

@@ -217,6 +217,7 @@ void AWWCharacter::BeginPlay() {
   CurrentHealth = MaxHealth;
   RecalculatePickaxeScalingFromSkillPoints();
   RefreshPickaxeWeapons();
+  NotifyStatsChanged();
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
 
@@ -685,6 +686,8 @@ void AWWCharacter::AddXP(float Amount) {
   if (!bAwaitingSkillChoice && PendingSkillChoices > 0) {
     OfferNextSkillChoices();
   }
+
+  NotifyStatsChanged();
 }
 
 void AWWCharacter::AddSkillPoints(int32 Amount) {
@@ -697,6 +700,7 @@ void AWWCharacter::AddSkillPoints(int32 Amount) {
   RecalculatePickaxeScalingFromSkillPoints();
   RefreshPickaxeWeapons();
   UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
+  NotifyStatsChanged();
 }
 
 void AWWCharacter::OfferNextSkillChoices() {
@@ -847,6 +851,8 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       CriticalHitChance * 100.0f, PrevBaseShotDamage, BaseShotDamage,
       PrevPickaxeCount, ActivePickaxeCount, PrevPickaxeDamage, PickaxeDamage,
       PrevPickaxeSpeed, PickaxeOrbitSpeedDegrees, PrevSkillPoints, SkillPoints);
+
+  NotifyStatsChanged();
 }
 
 FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
@@ -1069,6 +1075,8 @@ float AWWCharacter::TakeDamage(float DamageAmount,
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Player Health: %f / %f"),
          CurrentHealth, MaxHealth);
 
+  NotifyStatsChanged();
+
   if (CurrentHealth <= 0.0f) {
     Die();
   }
@@ -1080,6 +1088,10 @@ void AWWCharacter::Die() {
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] PLAYER DIED!"));
   // Restart the level on death
   UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()), false);
+}
+
+void AWWCharacter::NotifyStatsChanged() {
+  StatsChangedEvent.Broadcast();
 }
 
 void AWWCharacter::ToggleAnimationDebug() {

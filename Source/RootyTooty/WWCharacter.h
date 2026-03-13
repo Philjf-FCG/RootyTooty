@@ -13,6 +13,8 @@ class UStaticMeshComponent;
 class UAudioComponent;
 class AWWOrbitingPickaxe;
 
+DECLARE_MULTICAST_DELEGATE(FWWCharacterStatsChanged);
+
 UENUM()
 enum class ESkillUpgrade : uint8 {
   MaxHealth,
@@ -58,6 +60,7 @@ public:
   FORCEINLINE float GetXPToNextLevel() const { return XPToNextLevel; }
   FORCEINLINE int32 GetLevel() const { return Level; }
   FORCEINLINE int32 GetSkillPoints() const { return SkillPoints; }
+  FWWCharacterStatsChanged& OnStatsChanged() { return StatsChangedEvent; }
 
   UFUNCTION(Exec)
   void ToggleAnimationDebug();
@@ -197,5 +200,8 @@ private:
 
   void RecalculatePickaxeScalingFromSkillPoints();
   void RefreshPickaxeWeapons();
+  void NotifyStatsChanged();
+
+  FWWCharacterStatsChanged StatsChangedEvent;
 };
 

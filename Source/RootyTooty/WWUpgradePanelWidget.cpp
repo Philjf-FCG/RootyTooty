@@ -10,11 +10,10 @@
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 
-void UWWUpgradePanelWidget::NativeConstruct() {
-  Super::NativeConstruct();
-
+TSharedRef<SWidget> UWWUpgradePanelWidget::RebuildWidget() {
   if (!WidgetTree) {
-    return;
+    UE_LOG(LogTemp, Error, TEXT("[HUD] RebuildWidget: WidgetTree is null"));
+    return Super::RebuildWidget();
   }
 
   UCanvasPanel* RootCanvas =
@@ -67,6 +66,12 @@ void UWWUpgradePanelWidget::NativeConstruct() {
   ConfigureStatText(LevelText, TEXT("LevelText"), TEXT("Level: 1"));
   ConfigureStatText(XPText, TEXT("XPText"), TEXT("XP: 0 / 5"));
   ConfigureStatText(SPText, TEXT("SPText"), TEXT("SP: 0"));
+
+  return Super::RebuildWidget();
+}
+
+void UWWUpgradePanelWidget::NativeConstruct() {
+  Super::NativeConstruct();
 }
 
 void UWWUpgradePanelWidget::UpdateStatsPanel(int32 Score,
@@ -76,6 +81,14 @@ void UWWUpgradePanelWidget::UpdateStatsPanel(int32 Score,
                                              float XP,
                                              float XPToNext,
                                              int32 SkillPoints) {
+  CachedScore = Score;
+  CachedCurrentHealth = CurrentHealth;
+  CachedMaxHealth = MaxHealth;
+  CachedLevel = Level;
+  CachedXP = XP;
+  CachedXPToNext = XPToNext;
+  CachedSkillPoints = SkillPoints;
+
   if (ScoreText) {
     ScoreText->SetText(FText::FromString(FString::Printf(TEXT("Score: %d"), Score)));
   }
@@ -97,4 +110,6 @@ void UWWUpgradePanelWidget::UpdateStatsPanel(int32 Score,
   if (SPText) {
     SPText->SetText(FText::FromString(FString::Printf(TEXT("SP: %d"), SkillPoints)));
   }
+
+  BP_OnStatsUpdated(Score, CurrentHealth, MaxHealth, Level, XP, XPToNext, SkillPoints);
 }
