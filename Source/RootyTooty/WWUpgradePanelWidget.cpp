@@ -6,6 +6,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Engine/Texture2D.h"
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 
@@ -20,135 +21,80 @@ void UWWUpgradePanelWidget::NativeConstruct() {
       WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RootCanvas"));
   WidgetTree->RootWidget = RootCanvas;
 
-  UBorder* VellumBorder =
-      WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("VellumBorder"));
-  VellumBorder->SetPadding(FMargin(14.0f, 10.0f));
-  // High-contrast debug-safe parchment tint so visibility issues are obvious.
-  VellumBorder->SetBrushColor(FLinearColor(0.24f, 0.19f, 0.11f, 0.96f));
+  UBorder* HudBorder =
+      WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("HudBorder"));
+  HudBorder->SetPadding(FMargin(22.0f, 24.0f));
 
-  UCanvasPanelSlot* BorderSlot = RootCanvas->AddChildToCanvas(VellumBorder);
+  UTexture2D* HudTexture = Cast<UTexture2D>(
+      StaticLoadObject(UTexture2D::StaticClass(), nullptr, TEXT("/Game/UI/HUD.HUD")));
+  if (HudTexture) {
+    FSlateBrush Brush;
+    Brush.SetResourceObject(HudTexture);
+    Brush.ImageSize = FVector2D(340.0f, 620.0f);
+    Brush.DrawAs = ESlateBrushDrawType::Image;
+    HudBorder->SetBrush(Brush);
+    HudBorder->SetBrushColor(FLinearColor::White);
+  } else {
+    // Fallback tint so panel remains visible if texture is missing.
+    HudBorder->SetBrushColor(FLinearColor(0.14f, 0.11f, 0.09f, 0.92f));
+  }
+
+  UCanvasPanelSlot* BorderSlot = RootCanvas->AddChildToCanvas(HudBorder);
   if (BorderSlot) {
     BorderSlot->SetAutoSize(false);
-    BorderSlot->SetSize(FVector2D(470.0f, 250.0f));
-    BorderSlot->SetPosition(FVector2D(24.0f, 24.0f));
+    BorderSlot->SetSize(FVector2D(340.0f, 620.0f));
+    BorderSlot->SetPosition(FVector2D(16.0f, 16.0f));
     BorderSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
     BorderSlot->SetAlignment(FVector2D(0.0f, 0.0f));
   }
 
   UVerticalBox* ContentBox =
       WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentBox"));
-  VellumBorder->SetContent(ContentBox);
+  HudBorder->SetContent(ContentBox);
 
-  HeaderText =
-      WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeaderText"));
-  HeaderText->SetText(FText::FromString(TEXT("XP: 0 / 5 | Level: 1 | Skill Points: 0")));
-  HeaderText->SetColorAndOpacity(FSlateColor(FLinearColor(0.98f, 0.92f, 0.75f, 1.0f)));
-  HeaderText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 16));
-  HeaderText->SetShadowOffset(FVector2D(1.0f, 1.0f));
-  HeaderText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f));
-  ContentBox->AddChildToVerticalBox(HeaderText);
+  auto ConfigureStatText = [&](UTextBlock*& OutText, const TCHAR* Name, const TCHAR* Initial) {
+    OutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), FName(Name));
+    OutText->SetText(FText::FromString(Initial));
+    OutText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 24));
+    OutText->SetColorAndOpacity(FSlateColor(FLinearColor(0.97f, 0.95f, 0.90f, 1.0f)));
+    OutText->SetShadowOffset(FVector2D(1.0f, 1.0f));
+    OutText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f));
+    ContentBox->AddChildToVerticalBox(OutText);
+  };
 
-  UpgradeTextRows.Reset();
-  for (int32 RowIndex = 0; RowIndex < 5; ++RowIndex) {
-    UTextBlock* RowText = WidgetTree->ConstructWidget<UTextBlock>(
-        UTextBlock::StaticClass(),
-        FName(*FString::Printf(TEXT("UpgradeRow_%d"), RowIndex)));
-    RowText->SetText(FText::FromString(TEXT("")));
-    RowText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 14));
-    RowText->SetShadowOffset(FVector2D(1.0f, 1.0f));
-    RowText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f));
-    ContentBox->AddChildToVerticalBox(RowText);
-    UpgradeTextRows.Add(RowText);
-  }
-
-  ChoiceTitleText = WidgetTree->ConstructWidget<UTextBlock>(
-      UTextBlock::StaticClass(), TEXT("ChoiceTitleText"));
-  ChoiceTitleText->SetText(FText::FromString(TEXT("Choose Upgrade: 1 / 2 / 3")));
-  ChoiceTitleText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 14));
-  ChoiceTitleText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.93f, 0.45f, 1.0f)));
-  ChoiceTitleText->SetShadowOffset(FVector2D(1.0f, 1.0f));
-  ChoiceTitleText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f));
-  ChoiceTitleText->SetVisibility(ESlateVisibility::Collapsed);
-  ContentBox->AddChildToVerticalBox(ChoiceTitleText);
-
-  ChoiceTextRows.Reset();
-  for (int32 ChoiceIndex = 0; ChoiceIndex < 3; ++ChoiceIndex) {
-    UTextBlock* ChoiceText = WidgetTree->ConstructWidget<UTextBlock>(
-        UTextBlock::StaticClass(),
-        FName(*FString::Printf(TEXT("ChoiceRow_%d"), ChoiceIndex)));
-    ChoiceText->SetText(FText::FromString(TEXT("")));
-    ChoiceText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 14));
-    ChoiceText->SetShadowOffset(FVector2D(1.0f, 1.0f));
-    ChoiceText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f));
-    ChoiceText->SetVisibility(ESlateVisibility::Collapsed);
-    ContentBox->AddChildToVerticalBox(ChoiceText);
-    ChoiceTextRows.Add(ChoiceText);
-  }
-
-  // Temporary beacon to confirm UMG is rendering at all in PIE.
-  UTextBlock* BeaconText =
-      WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PanelBeaconText"));
-  BeaconText->SetText(FText::FromString(TEXT("PANEL ACTIVE")));
-  BeaconText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 24));
-  BeaconText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.15f, 0.15f, 1.0f)));
-  BeaconText->SetShadowOffset(FVector2D(1.0f, 1.0f));
-  BeaconText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 1.0f));
-
-  UCanvasPanelSlot* BeaconSlot = RootCanvas->AddChildToCanvas(BeaconText);
-  if (BeaconSlot) {
-    BeaconSlot->SetAutoSize(true);
-    BeaconSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
-    BeaconSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-    BeaconSlot->SetPosition(FVector2D(0.0f, -180.0f));
-  }
+  ConfigureStatText(ScoreText, TEXT("ScoreText"), TEXT("Score: 0"));
+  ConfigureStatText(HealthText, TEXT("HealthText"), TEXT("Health: 100 / 100"));
+  ConfigureStatText(LevelText, TEXT("LevelText"), TEXT("Level: 1"));
+  ConfigureStatText(XPText, TEXT("XPText"), TEXT("XP: 0 / 5"));
+  ConfigureStatText(SPText, TEXT("SPText"), TEXT("SP: 0"));
 }
 
-void UWWUpgradePanelWidget::UpdatePanel(const FString& HeaderLine,
-                                        const TArray<FString>& UpgradeLines,
-                                        const TArray<FLinearColor>& UpgradeColors,
-                                        bool bShowChoices,
-                                        const TArray<FString>& ChoiceLines,
-                                        const TArray<FLinearColor>& ChoiceColors) {
-  if (HeaderText) {
-    HeaderText->SetText(FText::FromString(HeaderLine));
+void UWWUpgradePanelWidget::UpdateStatsPanel(int32 Score,
+                                             float CurrentHealth,
+                                             float MaxHealth,
+                                             int32 Level,
+                                             float XP,
+                                             float XPToNext,
+                                             int32 SkillPoints) {
+  if (ScoreText) {
+    ScoreText->SetText(FText::FromString(FString::Printf(TEXT("Score: %d"), Score)));
   }
 
-  for (int32 RowIndex = 0; RowIndex < UpgradeTextRows.Num(); ++RowIndex) {
-    UTextBlock* RowText = UpgradeTextRows[RowIndex];
-    if (!RowText) {
-      continue;
-    }
-
-    RowText->SetText(FText::FromString(
-        UpgradeLines.IsValidIndex(RowIndex) ? UpgradeLines[RowIndex] : TEXT("")));
-
-    const FLinearColor RowColor = UpgradeColors.IsValidIndex(RowIndex)
-                                      ? UpgradeColors[RowIndex]
-                                      : FLinearColor(0.95f, 0.9f, 0.78f, 1.0f);
-    RowText->SetColorAndOpacity(FSlateColor(RowColor));
+  if (HealthText) {
+    HealthText->SetText(FText::FromString(
+        FString::Printf(TEXT("Health: %.0f / %.0f"), CurrentHealth, MaxHealth)));
   }
 
-  if (ChoiceTitleText) {
-    ChoiceTitleText->SetVisibility(
-        bShowChoices ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+  if (LevelText) {
+    LevelText->SetText(FText::FromString(FString::Printf(TEXT("Level: %d"), Level)));
   }
 
-  for (int32 ChoiceIndex = 0; ChoiceIndex < ChoiceTextRows.Num(); ++ChoiceIndex) {
-    UTextBlock* ChoiceText = ChoiceTextRows[ChoiceIndex];
-    if (!ChoiceText) {
-      continue;
-    }
+  if (XPText) {
+    XPText->SetText(FText::FromString(
+        FString::Printf(TEXT("XP: %.1f / %.1f"), XP, XPToNext)));
+  }
 
-    const bool bHasChoice = bShowChoices && ChoiceLines.IsValidIndex(ChoiceIndex);
-    ChoiceText->SetVisibility(
-        bHasChoice ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-
-    if (bHasChoice) {
-      ChoiceText->SetText(FText::FromString(ChoiceLines[ChoiceIndex]));
-      const FLinearColor ChoiceColor = ChoiceColors.IsValidIndex(ChoiceIndex)
-                                           ? ChoiceColors[ChoiceIndex]
-                                           : FLinearColor::White;
-      ChoiceText->SetColorAndOpacity(FSlateColor(ChoiceColor));
-    }
+  if (SPText) {
+    SPText->SetText(FText::FromString(FString::Printf(TEXT("SP: %d"), SkillPoints)));
   }
 }

@@ -13,23 +13,27 @@ class ROOTYTOOTY_API UWWUpgradePanelWidget : public UUserWidget {
 public:
   virtual void NativeConstruct() override;
 
-  void UpdatePanel(const FString& HeaderLine,
-                   const TArray<FString>& UpgradeLines,
-                   const TArray<FLinearColor>& UpgradeColors,
-                   bool bShowChoices,
-                   const TArray<FString>& ChoiceLines,
-                   const TArray<FLinearColor>& ChoiceColors);
+  void UpdateStatsPanel(int32 Score,
+                        float CurrentHealth,
+                        float MaxHealth,
+                        int32 Level,
+                        float XP,
+                        float XPToNext,
+                        int32 SkillPoints);
 
 private:
   UPROPERTY()
-  UTextBlock* HeaderText;
+  UTextBlock* ScoreText;
 
   UPROPERTY()
-  TArray<UTextBlock*> UpgradeTextRows;
+  UTextBlock* HealthText;
 
   UPROPERTY()
-  UTextBlock* ChoiceTitleText;
+  UTextBlock* LevelText;
 
   UPROPERTY()
-  TArray<UTextBlock*> ChoiceTextRows;
+  UTextBlock* XPText;
+
+  UPROPERTY()
+  UTextBlock* SPText;
 };

@@ -3,10 +3,13 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "InputCoreTypes.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
+#include "WWCharacter.h"
+#include "WWUpgradePanelWidget.h"
 
 namespace {
 USoundBase* LoadFirstSound(std::initializer_list<const TCHAR*> Paths) {
@@ -26,6 +29,7 @@ AWWPlayerController::AWWPlayerController(
   bEnableBackgroundMusic = true;
   BackgroundMusicComponent = nullptr;
   MusicStartAttempts = 0;
+  HudPanelWidget = nullptr;
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] WWPlayerController Initialized (AUDIO_PATCH_V2)"));
 }
 
@@ -40,6 +44,9 @@ void AWWPlayerController::BeginPlay() {
   bEnableMouseOverEvents = false;
   SetIgnoreMoveInput(false);
   SetIgnoreLookInput(false);
+
+  EnsureHudPanel();
+  RefreshHudPanel();
 
   TryStartBackgroundMusic();
 }
@@ -58,6 +65,8 @@ void AWWPlayerController::PostInitializeComponents() {
 
 void AWWPlayerController::PlayerTick(float DeltaTime) {
   Super::PlayerTick(DeltaTime);
+
+  RefreshHudPanel();
 
   if (!IsLocalController() || IsMoveInputIgnored()) {
     return;
@@ -93,6 +102,42 @@ void AWWPlayerController::PlayerTick(float DeltaTime) {
   if (!FMath::IsNearlyZero(RightScale)) {
     ControlledPawn->AddMovementInput(FVector::YAxisVector, RightScale);
   }
+}
+
+void AWWPlayerController::EnsureHudPanel() {
+  if (!IsLocalController() || HudPanelWidget) {
+    return;
+  }
+
+  HudPanelWidget = CreateWidget<UWWUpgradePanelWidget>(this, UWWUpgradePanelWidget::StaticClass());
+  if (HudPanelWidget) {
+    HudPanelWidget->AddToViewport(20);
+  }
+}
+
+void AWWPlayerController::RefreshHudPanel() {
+  EnsureHudPanel();
+  if (!HudPanelWidget) {
+    return;
+  }
+
+  AWWCharacter* PlayerCharacter = Cast<AWWCharacter>(GetPawn());
+  if (!PlayerCharacter) {
+    return;
+  }
+
+  const int32 Score = GetPlayerState<APlayerState>()
+                          ? FMath::RoundToInt(GetPlayerState<APlayerState>()->GetScore())
+                          : 0;
+
+  HudPanelWidget->UpdateStatsPanel(
+      Score,
+      PlayerCharacter->GetCurrentHealth(),
+      PlayerCharacter->GetMaxHealth(),
+      PlayerCharacter->GetLevel(),
+      PlayerCharacter->GetXP(),
+      PlayerCharacter->GetXPToNextLevel(),
+      PlayerCharacter->GetSkillPoints());
 }
 
 void AWWPlayerController::TryStartBackgroundMusic() {

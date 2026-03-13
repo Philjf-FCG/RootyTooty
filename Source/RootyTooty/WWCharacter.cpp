@@ -20,6 +20,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerState.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/CapsuleComponent.h"
@@ -438,36 +439,6 @@ void AWWCharacter::Tick(float DeltaTime) {
     CameraComp->bUsePawnControlRotation = false;
   }
 
-  if (GEngine) {
-    FString HeaderLine;
-    TArray<FString> UpgradeLines;
-    TArray<FLinearColor> UpgradeColors;
-    bool bShowChoices = false;
-    TArray<FString> ChoiceLines;
-    TArray<FLinearColor> ChoiceColors;
-    GetUpgradePanelData(HeaderLine, UpgradeLines, UpgradeColors, bShowChoices,
-                        ChoiceLines, ChoiceColors);
-
-    FString DebugHud = HeaderLine;
-    for (const FString& UpgradeLine : UpgradeLines) {
-      DebugHud += TEXT("\n") + UpgradeLine;
-    }
-
-    if (bShowChoices && ChoiceLines.Num() >= 3) {
-      DebugHud += TEXT("\nChoose Upgrade:");
-      for (const FString& ChoiceLine : ChoiceLines) {
-        DebugHud += TEXT("\n") + ChoiceLine;
-      }
-    }
-
-    // Stable HUD fallback that remains visible during play.
-    GEngine->AddOnScreenDebugMessage(
-        (uint64)((PTRINT)this) + 7,
-        0.0f,
-        FColor::White,
-        DebugHud);
-  }
-
   // Drive locomotion with speed thresholds + play-rate scaling to avoid
   // jittery toggles and "ice-skating" looking run cycles.
   const FVector Velocity = GetCharacterMovement()->Velocity;
@@ -695,6 +666,10 @@ AWWEnemy *AWWCharacter::FindNearestEnemy() {
 void AWWCharacter::AddXP(float Amount) {
   if (Amount <= 0.0f) {
     return;
+  }
+
+  if (APlayerState* PS = GetPlayerState()) {
+    PS->SetScore(PS->GetScore() + Amount);
   }
 
   XP += Amount;

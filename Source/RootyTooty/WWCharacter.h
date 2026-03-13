@@ -54,6 +54,10 @@ public:
 
   FORCEINLINE float GetCurrentHealth() const { return CurrentHealth; }
   FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
+  FORCEINLINE float GetXP() const { return XP; }
+  FORCEINLINE float GetXPToNextLevel() const { return XPToNextLevel; }
+  FORCEINLINE int32 GetLevel() const { return Level; }
+  FORCEINLINE int32 GetSkillPoints() const { return SkillPoints; }
 
   UFUNCTION(Exec)
   void ToggleAnimationDebug();

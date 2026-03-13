@@ -19,7 +19,9 @@ protected:
   virtual void PlayerTick(float DeltaTime) override;
 
 private:
+    void RefreshHudPanel();
   void TryStartBackgroundMusic();
+  void EnsureHudPanel();
 
   UPROPERTY(EditAnywhere, Category = "Audio")
   bool bEnableBackgroundMusic;
@@ -29,6 +31,9 @@ private:
 
   UPROPERTY(Transient)
   int32 MusicStartAttempts;
+
+  UPROPERTY(Transient)
+  class UWWUpgradePanelWidget* HudPanelWidget;
 
   FTimerHandle BackgroundMusicRetryHandle;
 };
