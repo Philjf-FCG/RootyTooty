@@ -317,26 +317,21 @@ void AWWCharacter::BeginPlay() {
 
     IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
         UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/RTG_Western_MM_Idle.RTG_Western_MM_Idle")));
-    if (!IdleAnimationAsset) {
-      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-          UAnimationAsset::StaticClass(), nullptr,
-          TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
-    }
+        TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
     if (!IdleAnimationAsset) {
       IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
           TEXT("/Game/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle")));
     }
+    if (!IdleAnimationAsset) {
+      IdleAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
+          UAnimationAsset::StaticClass(), nullptr,
+          TEXT("/Game/RTG_Western_MM_Idle.RTG_Western_MM_Idle")));
+    }
 
     MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
       UAnimationAsset::StaticClass(), nullptr,
-      TEXT("/Game/RTG_Western_MF_Pistol_Jog_Fwd.RTG_Western_MF_Pistol_Jog_Fwd")));
-    if (!MoveAnimationAsset) {
-      MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
-        UAnimationAsset::StaticClass(), nullptr,
-        TEXT("/Game/RTG_Western_MF_Unarmed_Jog_Fwd.RTG_Western_MF_Unarmed_Jog_Fwd")));
-    }
+      TEXT("/Game/RTG_Western_MF_Unarmed_Jog_Fwd.RTG_Western_MF_Unarmed_Jog_Fwd")));
     if (!MoveAnimationAsset) {
       MoveAnimationAsset = Cast<UAnimationAsset>(StaticLoadObject(
           UAnimationAsset::StaticClass(), nullptr,
