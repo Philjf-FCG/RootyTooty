@@ -14,12 +14,20 @@ public:
 
 protected:
   virtual void BeginPlay() override;
+  virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
   virtual void OnPossess(APawn* InPawn) override;
   virtual void PostInitializeComponents() override;
   virtual void PlayerTick(float DeltaTime) override;
 
 private:
+  void BindHudToCurrentCharacter();
+  void HandleObservedCharacterStatsChanged();
+  void EnsureHudPanel();
+  void RefreshHudPanel();
   void TryStartBackgroundMusic();
+
+  UPROPERTY(EditDefaultsOnly, Category = "HUD")
+  TSubclassOf<class UWWUpgradePanelWidget> HudPanelWidgetClass;
 
   UPROPERTY(EditAnywhere, Category = "Audio")
   bool bEnableBackgroundMusic;
@@ -29,6 +37,12 @@ private:
 
   UPROPERTY(Transient)
   int32 MusicStartAttempts;
+
+  UPROPERTY(Transient)
+  class UWWUpgradePanelWidget* HudPanelWidget;
+
+  UPROPERTY(Transient)
+  class AWWCharacter* ObservedHudCharacter;
 
   FTimerHandle BackgroundMusicRetryHandle;
 };

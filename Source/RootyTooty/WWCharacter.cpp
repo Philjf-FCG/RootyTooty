@@ -20,6 +20,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerState.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/CapsuleComponent.h"
@@ -216,6 +217,7 @@ void AWWCharacter::BeginPlay() {
   CurrentHealth = MaxHealth;
   RecalculatePickaxeScalingFromSkillPoints();
   RefreshPickaxeWeapons();
+  NotifyStatsChanged();
   const FLinearColor SheriffCoat = FLinearColor(0.16f, 0.23f, 0.31f, 1.0f);
   const FLinearColor SheriffLeather = FLinearColor(0.43f, 0.28f, 0.13f, 1.0f);
 
@@ -436,36 +438,6 @@ void AWWCharacter::Tick(float DeltaTime) {
 
   if (CameraComp) {
     CameraComp->bUsePawnControlRotation = false;
-  }
-
-  if (GEngine) {
-    FString HeaderLine;
-    TArray<FString> UpgradeLines;
-    TArray<FLinearColor> UpgradeColors;
-    bool bShowChoices = false;
-    TArray<FString> ChoiceLines;
-    TArray<FLinearColor> ChoiceColors;
-    GetUpgradePanelData(HeaderLine, UpgradeLines, UpgradeColors, bShowChoices,
-                        ChoiceLines, ChoiceColors);
-
-    FString DebugHud = HeaderLine;
-    for (const FString& UpgradeLine : UpgradeLines) {
-      DebugHud += TEXT("\n") + UpgradeLine;
-    }
-
-    if (bShowChoices && ChoiceLines.Num() >= 3) {
-      DebugHud += TEXT("\nChoose Upgrade:");
-      for (const FString& ChoiceLine : ChoiceLines) {
-        DebugHud += TEXT("\n") + ChoiceLine;
-      }
-    }
-
-    // Stable HUD fallback that remains visible during play.
-    GEngine->AddOnScreenDebugMessage(
-        (uint64)((PTRINT)this) + 7,
-        0.0f,
-        FColor::White,
-        DebugHud);
   }
 
   // Drive locomotion with speed thresholds + play-rate scaling to avoid
@@ -697,6 +669,10 @@ void AWWCharacter::AddXP(float Amount) {
     return;
   }
 
+  if (APlayerState* PS = GetPlayerState()) {
+    PS->SetScore(PS->GetScore() + Amount);
+  }
+
   XP += Amount;
 
   while (XP >= XPToNextLevel) {
@@ -710,6 +686,8 @@ void AWWCharacter::AddXP(float Amount) {
   if (!bAwaitingSkillChoice && PendingSkillChoices > 0) {
     OfferNextSkillChoices();
   }
+
+  NotifyStatsChanged();
 }
 
 void AWWCharacter::AddSkillPoints(int32 Amount) {
@@ -722,6 +700,7 @@ void AWWCharacter::AddSkillPoints(int32 Amount) {
   RecalculatePickaxeScalingFromSkillPoints();
   RefreshPickaxeWeapons();
   UE_LOG(LogTemp, Warning, TEXT("Skill points increased to: %d"), SkillPoints);
+  NotifyStatsChanged();
 }
 
 void AWWCharacter::OfferNextSkillChoices() {
@@ -872,6 +851,8 @@ void AWWCharacter::ApplySkillUpgrade(ESkillUpgrade Upgrade) {
       CriticalHitChance * 100.0f, PrevBaseShotDamage, BaseShotDamage,
       PrevPickaxeCount, ActivePickaxeCount, PrevPickaxeDamage, PickaxeDamage,
       PrevPickaxeSpeed, PickaxeOrbitSpeedDegrees, PrevSkillPoints, SkillPoints);
+
+  NotifyStatsChanged();
 }
 
 FString AWWCharacter::GetSkillUpgradeLabel(ESkillUpgrade Upgrade) const {
@@ -1094,6 +1075,8 @@ float AWWCharacter::TakeDamage(float DamageAmount,
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Player Health: %f / %f"),
          CurrentHealth, MaxHealth);
 
+  NotifyStatsChanged();
+
   if (CurrentHealth <= 0.0f) {
     Die();
   }
@@ -1105,6 +1088,10 @@ void AWWCharacter::Die() {
   UE_LOG(LogTemp, Warning, TEXT("[DEBUG] PLAYER DIED!"));
   // Restart the level on death
   UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()), false);
+}
+
+void AWWCharacter::NotifyStatsChanged() {
+  StatsChangedEvent.Broadcast();
 }
 
 void AWWCharacter::ToggleAnimationDebug() {
